@@ -67,8 +67,8 @@ def trigger_static_transition():
     placeholder.empty()
 
 def get_new_glitch_box(level=0):
-    min_size = 80
-    max_size = 300
+    min_size = 30
+    max_size = 120
     w = random.randint(min_size, max_size)
     h = random.randint(min_size, max_size)
     x1 = random.randint(50, 1024 - w - 50)
@@ -200,7 +200,6 @@ elif st.session_state.game_state == "playing":
 
     if gif_path and scaled_box:
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
-
         if coords and st.session_state.glitch_active:
             x1, y1, x2, y2 = scaled_box
             cx, cy = coords['x'], coords['y']
@@ -227,7 +226,7 @@ elif st.session_state.game_state == "playing":
                         st.session_state.game_state = 'game_over'
                 st.rerun()
             else:
-                # Do not move glitch or reload level on miss, just rerun to accept clicks again
+                # Do not move glitch or reload level on miss
                 st.rerun()
 
 elif st.session_state.game_state == "game_over":
