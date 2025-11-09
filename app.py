@@ -11,19 +11,19 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 
 st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
 
-
 # --- SETTINGS ---
 GAME_WIDTH = 700
 HIT_TOLERANCE = 40
-MOVE_DELAY = 15  # seconds before glitch teleports
+MOVE_DELAY = 15  # seconds before glitch teleports
 
 
 # --- LEVEL IMAGES ---
 LEVEL_IMGS = [
-    "assets/level1.png", "assets/level2.png", "assets/level3.png",
-    "assets/level4.png", "assets/level5.png", "assets/level6.png",
-    "assets/level7.png", "assets/level8.png", "assets/level9.png"
+    "assets/level1.png", "assets/level2.png", "assets/level3.png",
+    "assets/level4.png", "assets/level5.png", "assets/level6.png",
+    "assets/level7.png", "assets/level8.png", "assets/level9.png"
 ]
+
 
 
 # --- HELPER: ASSET LOADER ---
