@@ -11,6 +11,7 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 
 st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
 
+
 GAME_WIDTH = 700
 HIT_TOLERANCE = 100
 MOVE_DELAY = 15.0
@@ -30,26 +31,26 @@ def get_base64(bin_file):
 
 def inject_css():
     st.markdown("""
-        <style>
-            .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
-            #MainMenu, footer, header {visibility: hidden;}
-            .block-container { justify-content: center; align-items: center; display: flex; flex-direction: column; }
-            .stApp::after {
-                content: " "; position: fixed; inset: 0;
-                background:
-                    linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.25) 50%),
-                    linear-gradient(90deg, rgba(255,0,0,0.06), rgba(0,255,0,0.02), rgba(0,0,255,0.06));
-                background-size: 100% 3px, 3px 100%;
-                pointer-events: none; opacity: 0.15; z-index: 999;
-            }
-            h1 { animation: glitch-text 500ms infinite; }
-            @keyframes glitch-text {
-                0%,14% { text-shadow: 0.05em 0 0 #f44, -0.05em -0.025em 0 #2f2, 0.025em 0.05em 0 #34f; }
-                15%,49% { text-shadow: -0.05em -0.025em 0 #f44, 0.025em 0.025em 0 #2f2, -0.05em -0.05em 0 #34f; }
-                50%,99% { text-shadow: 0.025em 0.05em 0 #f44, 0.05em 0 0 #2f2, 0 -0.05em 0 #34f; }
-                100% { text-shadow: -0.025em 0 0 #f44, -0.025em -0.025em 0 #2f2, -0.025em -0.05em 0 #34f; }
-            }
-        </style>
+    <style>
+        .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
+        #MainMenu, footer, header {visibility: hidden;}
+        .block-container { justify-content: center; align-items: center; display: flex; flex-direction: column; }
+        .stApp::after {
+            content: " "; position: fixed; inset: 0;
+            background:
+                linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.25) 50%),
+                linear-gradient(90deg, rgba(255,0,0,0.06), rgba(0,255,0,0.02), rgba(0,0,255,0.06));
+            background-size: 100% 3px, 3px 100%;
+            pointer-events: none; opacity: 0.15; z-index: 999;
+        }
+        h1 { animation: glitch-text 500ms infinite; }
+        @keyframes glitch-text {
+            0%,14% { text-shadow: 0.05em 0 0 #f44, -0.05em -0.025em 0 #2f2, 0.025em 0.05em 0 #34f; }
+            15%,49% { text-shadow: -0.05em -0.025em 0 #f44, 0.025em 0.025em 0 #2f2, -0.05em -0.05em 0 #34f; }
+            50%,99% { text-shadow: 0.025em 0.05em 0 #f44, 0.05em 0 0 #2f2, 0 -0.05em 0 #34f; }
+            100% { text-shadow: -0.025em 0 0 #f44, -0.025em -0.025em 0 #2f2, -0.025em -0.05em 0 #34f; }
+        }
+    </style>
     """, unsafe_allow_html=True)
 
 def trigger_static_transition():
@@ -136,7 +137,8 @@ if 'game_state' not in st.session_state:
         'final_time': 0.0,
         'last_move_time': time.time(),
         'glitch_seed': random.randint(1, 100000),
-        'current_box': get_new_glitch_box()
+        'current_box': get_new_glitch_box(),
+        'glitch_active': False,
     })
 
 conn = None
@@ -169,11 +171,13 @@ def move_glitch():
     st.session_state.glitch_seed = random.randint(1, 100000)
     st.session_state.current_box = get_new_glitch_box()
     st.session_state.last_move_time = time.time()
+    st.session_state.glitch_active = True
 
 st.title("DETROIT: ANOMALY [09]")
 
 if st.session_state.game_state == 'playing':
     if time.time() - st.session_state.last_move_time > MOVE_DELAY:
+        st.session_state.glitch_active = False
         move_glitch()
         st.rerun()
 
@@ -196,9 +200,10 @@ elif st.session_state.game_state == "playing":
     if gif_path and scaled_box:
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
 
-        if coords:
+        if coords and st.session_state.glitch_active:
             if time.time() - st.session_state.last_move_time > MOVE_DELAY:
                 st.toast("TOO SLOW! TARGET SHIFTED.", icon="⚠️")
+                st.session_state.glitch_active = False
                 move_glitch()
                 st.rerun()
             else:
@@ -207,6 +212,7 @@ elif st.session_state.game_state == "playing":
 
                 if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
                     trigger_static_transition()
+                    st.session_state.glitch_active = False  # disable click until next glitch appears
                     if lvl_idx < 8:
                         st.session_state.current_level += 1
                         move_glitch()
