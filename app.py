@@ -2,24 +2,30 @@ import streamlit as st
 import time
 import pandas as pd
 import random
-import os
-import base64
-from PIL import Image, ImageOps, ImageEnhance
 from streamlit_gsheets import GSheetsConnection
 from streamlit_image_coordinates import streamlit_image_coordinates
 
-st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
 
 # --- SETTINGS ---
 GAME_WIDTH = 700
-HIT_TOLERANCE = 40 
-MOVE_DELAY = 4.0 # You have 4 seconds to click before it moves "in the background"
+MOVE_DELAY = 3.0 # How fast it moves to a new spot (lower = harder)
+HIT_TOLERANCE = 50
 
-# --- HELPER: ASSET LOADER ---
-def get_base64(bin_file):
-    try:
-        with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
-    except: return None
+# --- GAME DATA: FIXED SPOTS PER LEVEL ---
+# UPDATE THESE COORDINATES to match features in your actual pixel art!
+# Format: (x_center, y_center) for each possible glitch location.
+LEVELS = [
+    {"img": "assets/level1.png", "spots": [(200, 200), (512, 512), (800, 300), (400, 800)]},
+    {"img": "assets/level2.png", "spots": [(100, 800), (900, 100), (500, 500), (300, 400)]},
+    {"img": "assets/level3.png", "spots": [(600, 200), (200, 600), (800, 800), (512, 300)]},
+    {"img": "assets/level4.png", "spots": [(350, 350), (700, 700), (150, 850), (900, 200)]},
+    {"img": "assets/level5.png", "spots": [(512, 100), (512, 900), (100, 512), (900, 512)]},
+    {"img": "assets/level6.png", "spots": [(250, 250), (750, 250), (250, 750), (750, 750)]},
+    {"img": "assets/level7.png", "spots": [(100, 100), (200, 200), (300, 300), (400, 400)]},
+    {"img": "assets/level8.png", "spots": [(600, 600), (700, 700), (800, 800), (900, 900)]},
+    {"img": "assets/level9.png", "spots": [(512, 512), (512, 200), (200, 512), (800, 512)]},
+]
 
 # --- CSS: RETRO EFFECTS ---
 def inject_css():
@@ -46,83 +52,32 @@ def inject_css():
     </style>
     """, unsafe_allow_html=True)
 
-# --- TRANSITION ---
-def trigger_static_transition():
-    st.markdown('<audio src="https://www.myinstants.com/media/sounds/static-noise.mp3" autoplay style="display:none;"></audio>', unsafe_allow_html=True)
-    placeholder = st.empty()
-    with placeholder.container():
-        st.markdown('<div style="position:fixed;top:0;left:0;width:100%;height:100%;background-color:#111;z-index:10000;"></div>', unsafe_allow_html=True)
-        time.sleep(0.1)
-        gb64 = get_base64("assets/glitch.gif")
-        if not gb64: gb64 = get_base64("assets/glitch.avif")
-        g_url = f"data:image/gif;base64,{gb64}" if gb64 else "https://media.giphy.com/media/oEI9uBYSzLpBK/giphy.gif"
-        st.markdown(f'<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:url({g_url});background-size:cover;z-index:10001;opacity:0.8;mix-blend-mode:hard-light;"></div>', unsafe_allow_html=True)
-        time.sleep(0.4)
-    placeholder.empty()
-
-# --- RANDOM GENERATORS ---
-def get_new_glitch_box():
-    w = random.randint(60, 200)
-    h = random.randint(60, 200)
-    x1 = random.randint(50, 1024 - w - 50)
-    y1 = random.randint(50, 1024 - h - 50)
-    return (x1, y1, x1 + w, y1 + h)
-
-def generate_mutating_frame(base_img, box):
-    frame = base_img.copy()
-    x1, y1, x2, y2 = box
-    cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-    for _ in range(random.randint(4, 9)):
-        w_shard = random.randint(int((x2-x1)*0.4), int((x2-x1)*1.2))
-        h_shard = random.randint(int((y2-y1)*0.4), int((y2-y1)*1.2))
-        sx = max(0, min(cx - w_shard // 2 + random.randint(-40, 40), base_img.width - w_shard))
-        sy = max(0, min(cy - h_shard // 2 + random.randint(-40, 40), base_img.height - h_shard))
-        shard_box = (sx, sy, sx + w_shard, sy + h_shard)
-        try:
-            shard = frame.crop(shard_box).convert("RGB")
-            shard = ImageOps.invert(shard)
-            shard = ImageEnhance.Contrast(shard).enhance(3.0)
-            frame.paste(shard, shard_box)
-        except: pass
-    return frame
-
-@st.cache_data(show_spinner=False, persist="disk")
-def generate_scaled_gif(img_path, original_box, target_width, level_idx, glitch_seed):
-    try:
-        random.seed(glitch_seed)
-        base_img = Image.open(img_path).convert("RGB")
-        scale_factor = target_width / base_img.width
-        target_height = int(base_img.height * scale_factor)
-        base_img = base_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
-
-        x1, y1, x2, y2 = original_box
-        scaled_box = (int(x1 * scale_factor), int(y1 * scale_factor), int(x2 * scale_factor), int(y2 * scale_factor))
-
-        frames = []
-        for _ in range(15): frames.append(base_img.copy())
-        for _ in range(8): frames.append(generate_mutating_frame(base_img, scaled_box))
-            
-        temp_file = f"lvl_{level_idx}_{glitch_seed}.gif"
-        frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15 + [70]*8, loop=0)
-        return temp_file, scaled_box
-    except: return None, None
-
-# --- GAME DATA ---
-LEVEL_FILES = [
-    "assets/level1.png", "assets/level2.png", "assets/level3.png",
-    "assets/level4.png", "assets/level5.png", "assets/level6.png",
-    "assets/level7.png", "assets/level8.png", "assets/level9.png"
-]
+# --- DYNAMIC GLITCH CSS ---
+def inject_glitch_css(l, t, w, h):
+    st.markdown(f"""
+    <style>
+        @keyframes rapid-flash {{
+            0%, 85% {{ opacity: 0; filter: invert(0); }}
+            86% {{ opacity: 0.9; filter: invert(1) hue-rotate(180deg) contrast(2); }}
+            88% {{ opacity: 0.9; filter: invert(1) hue-rotate(0deg); }}
+            90% {{ opacity: 0.9; filter: invert(1) hue-rotate(90deg) contrast(3); }}
+            92% {{ opacity: 0; }}
+        }}
+        div[data-testid="stImage"]::before {{
+            content: ""; position: absolute;
+            left: {l}%; top: {t}%; width: {w}%; height: {h}%;
+            background: rgba(255, 255, 255, 0.1);
+            animation: rapid-flash 4s infinite linear;
+            pointer-events: none; z-index: 999;
+            mix-blend-mode: difference; border: 1px solid rgba(255,0,0,0.3);
+        }}
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- INIT ---
 inject_css()
 if 'game_state' not in st.session_state:
-    st.session_state.update({
-        'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'final_time': 0.0,
-        'last_move_time': time.time(), 
-        'glitch_seed': random.randint(1, 100000),
-        'current_box': get_new_glitch_box()
-    })
+    st.session_state.update({'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'last_move_time': time.time(), 'gx':0, 'gy':0, 'gw':0, 'gh':0})
 
 conn = None
 try: conn = st.connection("gsheets", type=GSheetsConnection)
@@ -143,17 +98,84 @@ def get_leaderboard():
         except: pass
     return pd.DataFrame(columns=["Rank", "Tag", "Time (Offline)"])
 
+# --- WHACK-A-GLITCH RANDOMIZER ---
+def move_glitch(level_idx):
+    # 1. Pick a random predefined spot for this level
+    spots = LEVELS[level_idx]["spots"]
+    center_x, center_y = random.choice(spots)
+    
+    # 2. Randomize the size of the glitch
+    st.session_state.gw = random.randint(80, 250)
+    st.session_state.gh = random.randint(80, 250)
+    
+    # 3. Center the new random box on the chosen spot
+    st.session_state.gx = max(0, center_x - st.session_state.gw // 2)
+    st.session_state.gy = max(0, center_y - st.session_state.gh // 2)
+    
+    st.session_state.last_move_time = time.time()
+
 # --- GAME LOOP ---
 st.title("DETROIT: ANOMALY [09]")
+
+if st.session_state.game_state == 'playing':
+    # Auto-move if player is too slow
+    if time.time() - st.session_state.last_move_time > MOVE_DELAY:
+        move_glitch(st.session_state.current_level)
+        st.rerun()
 
 if st.session_state.game_state == "menu":
     tag = st.text_input("OPERATIVE TAG (3 CHARS):", max_chars=3).upper()
     if st.button(">> START SIMULATION <<", type="primary"):
         if len(tag) == 3:
-            st.session_state.update({
-                'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 
-                'current_level': 0, 'last_move_time': time.time(), 
-                'current_box': get_new_glitch_box(), 'glitch_seed': random.randint(1, 100000)
-            })
+            move_glitch(0)
+            st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 'current_level': 0})
             st.rerun()
     st.markdown("### TOP AGENTS")
+    st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
+
+elif st.session_state.game_state == "playing":
+    lvl_idx = st.session_state.current_level
+    st.write(f"SECTOR 0{lvl_idx + 1} / 09")
+
+    # Calculate CSS percentages based on 1024x1024 native size
+    l, t = (st.session_state.gx / 1024) * 100, (st.session_state.gy / 1024) * 100
+    w, h = (st.session_state.gw / 1024) * 100, (st.session_state.gh / 1024) * 100
+    inject_glitch_css(l, t, w, h)
+
+    coords = streamlit_image_coordinates(LEVELS[lvl_idx]["img"], key=f"lvl_{lvl_idx}", width=GAME_WIDTH)
+
+    if coords:
+        # Scale click back to native 1024 space
+        scale = 1024 / GAME_WIDTH
+        cx, cy = coords['x'] * scale, coords['y'] * scale
+        x1, y1 = st.session_state.gx, st.session_state.gy
+        x2, y2 = x1 + st.session_state.gw, y1 + st.session_state.gh
+
+        if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and \
+           (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
+            if lvl_idx < 8:
+                st.session_state.current_level += 1
+                move_glitch(st.session_state.current_level)
+                st.rerun()
+            else:
+                st.session_state.final_time = time.time() - st.session_state.start_time
+                st.session_state.game_state = 'game_over'
+                st.rerun()
+        else:
+             st.toast("ANOMALY SHIFTED.", icon="⚠️")
+             move_glitch(lvl_idx)
+             time.sleep(0.5)
+             st.rerun()
+    time.sleep(0.5)
+    st.rerun()
+
+elif st.session_state.game_state == "game_over":
+    st.balloons()
+    st.write(f"AGENT: {st.session_state.player_tag} | TIME: {st.session_state.final_time:.2f}s")
+    if st.button("UPLOAD SCORE", type="primary"):
+        if save_score(st.session_state.player_tag, st.session_state.final_time):
+            st.success("UPLOADED.")
+        else: st.error("FAILED.")
+        time.sleep(2); st.session_state.game_state = 'menu'; st.rerun()
+    st.markdown("### GLOBAL RANKINGS")
+    st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
