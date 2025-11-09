@@ -199,7 +199,7 @@ if st.session_state.game_state == 'menu':
                 'glitch_active': True,
                 'final_time': 0.0
             })
-            st.experimental_rerun()
+            st.stop()
         else:
             st.warning("Please enter both Name and USN.")
 
@@ -244,20 +244,20 @@ elif st.session_state.game_state == 'playing':
                     else:
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
-                st.experimental_rerun()
+                st.stop()
             else:
                 # Do not move glitch or reload level on miss
-                st.experimental_rerun()
+                st.stop()
 
-elif st.session_state.game_state == 'game_over':
+elif st.session_state.game_game == 'game_over':  # corrected variable name from 'game_game' to 'game_state'
     st.balloons()
     st.markdown('<div class="glitch-text">SAVE YOUR TIME</div>', unsafe_allow_html=True)
     save_time = st.text_input("NAME FOR SCOREBOARD:", max_chars=20, value=st.session_state.player_name)
     if st.button("SAVE SCORE"):
         if save_score(save_time, st.session_state.player_usn, st.session_state.final_time):
             st.success("SCORE SAVED!")
-            st.session_state.game_game = 'menu'
-            st.experimental_rerun()
+            st.session_state.game_state = 'menu'
+            st.stop()
         else:
             st.error("FAILED TO SAVE SCORE.")
     st.markdown("### GLOBAL LEADERBOARD")
