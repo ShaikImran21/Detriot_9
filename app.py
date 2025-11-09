@@ -12,9 +12,8 @@ st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initia
 
 # --- SETTINGS ---
 GAME_WIDTH = 700
-HIT_TOLERANCE = 0  # HARDCORE: Must click exactly ON the glitch pixels.
-ORIGINAL_IMG_SIZE = 1024 # Assumed size of source images for coordinate math
-GLITCH_SIZE = 120 # How big (in pixels) the random glitch square will be
+# Since the glitch now changes size rapidly, we need a fair tolerance.
+HIT_TOLERANCE = 50 
 
 # --- HELPER: ASSET LOADER ---
 def get_base64(bin_file):
@@ -61,22 +60,46 @@ def trigger_static_transition():
         time.sleep(0.4)
     placeholder.empty()
 
-# --- CHAOS GENERATOR ---
-def create_chaos_frame(base_crop):
-    frame = ImageEnhance.Contrast(base_crop).enhance(2.0)
-    w, h = frame.size
-    for _ in range(random.randint(3, 6)):
-        bx1 = random.randint(0, w); by1 = random.randint(0, h)
-        bx2 = bx1 + random.randint(10, max(20, w//2)); by2 = by1 + random.randint(5, max(10, h//4))
+# --- NEW: MUTATING CHAOS GENERATOR ---
+def generate_mutating_frame(base_img, box):
+    frame = base_img.copy()
+    x1, y1, x2, y2 = box
+    cx, cy = (x1 + x2) // 2, (y1 + y2) // 2 # Center of anomaly
+    
+    # Generate 3 to 8 random "shards" of glitch per frame
+    # This ensures every single frame looks completely different in shape and size
+    for _ in range(random.randint(3, 8)):
+        # Random width and height for this specific shard
+        w_shard = random.randint(30, 150)
+        h_shard = random.randint(10, 100)
+        
+        # Place shard randomly NEAR the center, but jittered
+        sx = cx - w_shard // 2 + random.randint(-50, 50)
+        sy = cy - h_shard // 2 + random.randint(-50, 50)
+        
+        # Clamp to image boundaries
+        sx = max(0, min(sx, base_img.width - w_shard))
+        sy = max(0, min(sy, base_img.height - h_shard))
+        shard_box = (sx, sy, sx + w_shard, sy + h_shard)
+
         try:
-            box = (max(0, bx1), max(0, by1), min(w, bx2), min(h, by2))
-            frame.paste(ImageOps.invert(frame.crop(box).convert('RGB')), box)
+            # Create the chaotic shard (invert + high contrast)
+            shard = frame.crop(shard_box).convert("RGB")
+            shard = ImageOps.invert(shard)
+            shard = ImageEnhance.Contrast(shard).enhance(4.0) # Extreme contrast
+            
+            # Occasionally shift color channels for extra chaos
+            if random.random() > 0.7:
+                r, g, b = shard.split()
+                shard = Image.merge("RGB", (b, r, g)) # Swap channels
+                
+            frame.paste(shard, shard_box)
         except: pass
+        
     return frame
 
 @st.cache_data(show_spinner=False, persist="disk")
-def generate_scaled_gif(img_path, original_box, target_width, level_idx, unique_run_id):
-    # unique_run_id ensures GIFs regenerate when a new game starts
+def generate_scaled_gif(img_path, original_box, target_width, level_idx):
     try:
         base_img = Image.open(img_path).convert("RGB")
         scale_factor = target_width / base_img.width
@@ -84,55 +107,44 @@ def generate_scaled_gif(img_path, original_box, target_width, level_idx, unique_
         base_img = base_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
         x1, y1, x2, y2 = original_box
         scaled_box = (int(x1 * scale_factor), int(y1 * scale_factor), int(x2 * scale_factor), int(y2 * scale_factor))
+
         frames = []
-        base_crop = base_img.crop(scaled_box)
+        # 15 frames of NORMAL (waiting...)
         for _ in range(15): frames.append(base_img.copy())
-        for _ in range(6):
-            frame = base_img.copy()
-            frame.paste(create_chaos_frame(base_crop), scaled_box)
-            frames.append(frame)
         
-        # Filename includes run_id to force fresh generation on new games
-        temp_file = f"level_{level_idx}_{unique_run_id}.gif"
-        frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15 + [60]*6, loop=0)
+        # 12 frames of PURE MUTATING CHAOS (longer visible glitch)
+        # Every frame calls the generator fresh, so it constantly changes shape
+        for _ in range(12):
+            frames.append(generate_mutating_frame(base_img, scaled_box))
+            
+        temp_file = f"level_{level_idx}_mutating.gif"
+        # 70ms duration for chaos frames = violent, rapid mutation
+        durations = [200]*15 + [70]*12
+        frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=durations, loop=0)
         return temp_file, scaled_box
     except: return None, None
 
-# --- GAME DATA & RANDOMIZER ---
-BASE_LEVELS = [
-    "assets/level1.png", "assets/level2.png", "assets/level3.png",
-    "assets/level4.png", "assets/level5.png", "assets/level6.png",
-    "assets/level7.png", "assets/level8.png", "assets/level9.png"
+# --- GAME DATA ---
+LEVELS = [
+    {"img": "assets/level1.png", "glitch_box": (460, 410, 540, 530)}, 
+    {"img": "assets/level2.png", "glitch_box": (610, 420, 860, 840)}, 
+    {"img": "assets/level3.png", "glitch_box": (165, 495, 220, 605)}, 
+    {"img": "assets/level4.png", "glitch_box": (650, 640, 910, 875)}, 
+    {"img": "assets/level5.png", "glitch_box": (450, 190, 520, 310)}, 
+    {"img": "assets/level6.png", "glitch_box": (445, 305, 565, 605)}, 
+    {"img": "assets/level7.png", "glitch_box": (770, 360, 915, 505)}, 
+    {"img": "assets/level8.png", "glitch_box": (495, 150, 560, 215)}, 
+    {"img": "assets/level9.png", "glitch_box": (440, 380, 510, 455)}, 
 ]
-
-def randomize_glitches():
-    # Generates completely new glitch coordinates for all 9 levels
-    new_levels = []
-    for img_path in BASE_LEVELS:
-        # Pick random coordinates within the 1024x1024 space, keeping away from extreme edges
-        gx = random.randint(50, ORIGINAL_IMG_SIZE - GLITCH_SIZE - 50)
-        gy = random.randint(50, ORIGINAL_IMG_SIZE - GLITCH_SIZE - 50)
-        new_levels.append({
-            "img": img_path,
-            "glitch_box": (gx, gy, gx + GLITCH_SIZE, gy + GLITCH_SIZE)
-        })
-    return new_levels
 
 # --- INIT ---
 inject_css()
 if 'game_state' not in st.session_state:
-    st.session_state.update({
-        'game_state': 'menu',
-        'current_level': 0,
-        'start_time': 0.0,
-        'player_tag': 'UNK',
-        'final_time': 0.0,
-        'run_id': int(time.time()), # Unique ID for this playthrough
-        'levels': randomize_glitches() # Initial random set
-    })
+    st.session_state.update({'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'final_time': 0.0})
 
 conn = None
-try: conn = st.connection("gsheets", type=GSheetsConnection)
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
 except: pass
 
 def save_score(tag, time_val):
@@ -155,34 +167,24 @@ st.title("DETROIT: ANOMALY [09]")
 
 if st.session_state.game_state == "menu":
     tag = st.text_input("OPERATIVE TAG (3 CHARS):", max_chars=3).upper()
-    if st.button(">> START NEW SIMULATION <<", type="primary"):
+    if st.button(">> START SIMULATION <<", type="primary"):
         if len(tag) == 3:
-            # FULL RESET: New random locations, new run ID
-            st.session_state.update({
-                'game_state': 'playing',
-                'player_tag': tag,
-                'start_time': time.time(),
-                'current_level': 0,
-                'run_id': int(time.time()),
-                'levels': randomize_glitches()
-            })
+            st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 'current_level': 0})
             st.rerun()
     st.markdown("### TOP AGENTS")
     st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
 
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
-    data = st.session_state.levels[lvl_idx] # Use session state levels, not a global constant
+    data = LEVELS[lvl_idx]
     st.write(f"SECTOR 0{lvl_idx + 1} / 09")
 
-    # Generate fresh GIF for this specific run
-    gif_path, scaled_box = generate_scaled_gif(data["img"], data["glitch_box"], GAME_WIDTH, lvl_idx, st.session_state.run_id)
+    gif_path, scaled_box = generate_scaled_gif(data["img"], data["glitch_box"], GAME_WIDTH, lvl_idx)
 
     if gif_path and scaled_box:
-        coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.run_id}", width=GAME_WIDTH)
+        coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}", width=GAME_WIDTH)
         if coords:
             x1, y1, x2, y2 = scaled_box
-            # EXACT HIT CHECK (with tiny tolerance)
             if (x1 - HIT_TOLERANCE) <= coords['x'] <= (x2 + HIT_TOLERANCE) and \
                (y1 - HIT_TOLERANCE) <= coords['y'] <= (y2 + HIT_TOLERANCE):
                 trigger_static_transition()
