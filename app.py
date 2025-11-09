@@ -12,6 +12,7 @@ st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initia
 
 GAME_WIDTH = 700
 HIT_TOLERANCE = 100
+GLITCH_VISIBLE_DURATION = 1.0  # second window glitch is clickable
 
 LEVEL_FILES = [
     "assets/level1.png", "assets/level2.png", "assets/level3.png",
@@ -134,7 +135,8 @@ if 'game_state' not in st.session_state:
         'glitch_seed': random.randint(1, 100000),
         'current_box': get_new_glitch_box(),
         'hits': 0,
-        'glitch_active': True
+        'glitch_active': True,
+        'last_glitch_visible_time': 0.0,
     })
 
 conn = None
@@ -168,6 +170,7 @@ def move_glitch():
     st.session_state.glitch_seed = random.randint(1, 100000)
     st.session_state.current_box = get_new_glitch_box(level=lvl)
     st.session_state.glitch_active = True
+    st.session_state.last_glitch_visible_time = time.time()
     st.session_state.last_move_time = time.time()
 
 st.title("DETROIT: ANOMALY [09]")
@@ -179,7 +182,7 @@ if st.session_state.game_state == "menu":
             move_glitch()
             st.session_state.update({
                 'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(),
-                'current_level': 0, 'hits': 0, 'glitch_active': True
+                'current_level': 0, 'hits': 0, 'glitch_active': True, 'last_glitch_visible_time': time.time()
             })
             st.rerun()
     st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
@@ -201,8 +204,9 @@ elif st.session_state.game_state == "playing":
 
     if gif_path and scaled_box:
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
+        current_time = time.time()
 
-        if coords and st.session_state.glitch_active:
+        if coords and st.session_state.glitch_active and current_time - st.session_state.last_glitch_visible_time <= GLITCH_VISIBLE_DURATION:
             x1, y1, x2, y2 = scaled_box
             cx, cy = coords['x'], coords['y']
 
@@ -210,7 +214,7 @@ elif st.session_state.game_state == "playing":
                 st.session_state.glitch_active = False
                 trigger_static_transition()
                 st.session_state.hits += 1
-                move_glitch()
+
                 if st.session_state.hits >= glitches_needed:
                     if lvl_idx < len(GLITCHES_PER_LEVEL) - 1:
                         st.session_state.current_level += 1
@@ -218,13 +222,15 @@ elif st.session_state.game_state == "playing":
                     else:
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
-                st.rerun()
+
+                move_glitch()
+                st.experimental_rerun()
             else:
                 st.toast("MISS! RELOCATING...", icon="❌")
                 move_glitch()
-                st.rerun()
-        elif not st.session_state.glitch_active:
-            st.info("Glitch moving or loading... please wait")
+                st.experimental_rerun()
+        else:
+            st.info("Glitch not visible or loading...")
 
 elif st.session_state.game_state == "game_over":
     st.balloons()
@@ -236,6 +242,6 @@ elif st.session_state.game_state == "game_over":
             st.error("UPLOAD FAILED.")
         time.sleep(2)
         st.session_state.game_state = 'menu'
-        st.rerun()
+        st.experimental_rerun()
     st.markdown("### GLOBAL RANKINGS")
     st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
