@@ -12,7 +12,7 @@ st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initia
 
 GAME_WIDTH = 700
 HIT_TOLERANCE = 100
-GLITCH_VISIBLE_DURATION = 1.0  # second window glitch is clickable
+GLITCH_VISIBLE_DURATION = 3.0  # second window glitch is clickable
 
 LEVEL_FILES = [
     "assets/level1.png", "assets/level2.png", "assets/level3.png",
