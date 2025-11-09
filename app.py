@@ -11,7 +11,7 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 700
-HIT_TOLERANCE = 0
+HIT_TOLERANCE = 70
 
 LEVEL_FILES = [
     "assets/level1.png", "assets/level2.png", "assets/level3.png",
