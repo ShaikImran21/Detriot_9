@@ -67,13 +67,14 @@ def trigger_static_transition():
     placeholder.empty()
 
 def get_new_glitch_box(level=0):
-    max_size = max(250 - level * 20, 50)
-    min_size = max(100 - level * 10, 30)
+    min_size = 20  # smaller than before
+    max_size = 70
     w = random.randint(min_size, max_size)
     h = random.randint(min_size, max_size)
     x1 = random.randint(50, 1024 - w - 50)
     y1 = random.randint(50, 1024 - h - 50)
     return (x1, y1, x1 + w, y1 + h)
+
 
 def generate_mutating_frame(base_img, box):
     frame = base_img.copy()
