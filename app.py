@@ -15,14 +15,14 @@ st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initia
 GAME_WIDTH = 700
 HIT_TOLERANCE = 100
 
-# MODIFIED: Reduced to 5 levels (level1 to level5)
+# MODIFIED: Reduced to 4 levels
 LEVEL_FILES = [
     "assets/level1.png", "assets/level2.png", "assets/level3.png",
-    "assets/level4.png", "assets/level5.png"
+    "assets/level4.png"
 ]
 
-# MODIFIED: 5 levels with a total of 30 glitches (4+5+6+7+8) for ~3 minute play time.
-GLITCHES_PER_LEVEL = [4, 5, 6, 7, 8] 
+# MODIFIED: 4 levels with a total of 22 real glitches (3+5+7+7)
+GLITCHES_PER_LEVEL = [3, 5, 7, 7] 
 
 # --- HELPER FUNCTIONS ---
 
@@ -101,9 +101,7 @@ def trigger_static_transition():
     placeholder.empty()
 
 def get_new_glitch_box(level=0):
-    """
-    MODIFIED: Generates aggressively smaller glitch boxes for increased difficulty per level.
-    """
+    """Generates aggressively smaller glitch boxes for increased difficulty per level."""
     # Max size reduction increased: capped around 150 - (Level * 20)
     max_size = max(150 - level * 20, 30) 
     
@@ -121,80 +119,107 @@ def get_new_glitch_box(level=0):
     
     return (x1, y1, x1 + w, y1 + h)
 
-def generate_mutating_frame(base_img, box):
-    """Creates a single corrupted image frame based on the glitch box."""
+def generate_fake_glitch_box(level=0):
+    """Generates a slightly larger, non-target glitch box (decoy)."""
+    # Fake glitch is intentionally easier to spot/hit but doesn't count
+    max_size = max(180 - level * 15, 60) 
+    min_size = max(70 - level * 5, 40) 
+    
+    w = random.randint(min_size, max_size)
+    h = random.randint(min_size, max_size)
+    
+    x1 = random.randint(50, 1024 - w - 50)
+    y1 = random.randint(50, 1024 - h - 50)
+    return (x1, y1, x1 + w, y1 + h)
+
+
+def generate_mutating_frame(base_img, boxes, is_fake=False):
+    """Creates a single corrupted image frame based on the glitch boxes."""
     frame = base_img.copy()
-    x1, y1, x2, y2 = box
-    cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-    for _ in range(random.randint(4, 9)):
-        w_shard = random.randint(30, 200)
-        h_shard = random.randint(20, 150)
-        sx = cx - w_shard // 2 + random.randint(-60, 60)
-        sy = cy - h_shard // 2 + random.randint(-60, 60)
-        sx = max(0, min(sx, base_img.width - w_shard))
-        sy = max(0, min(sy, base_img.height - h_shard))
-        shard_box = (sx, sy, sx + w_shard, sy + h_shard)
-        try:
-            shard = frame.crop(shard_box).convert("RGB")
-            shard = ImageOps.invert(shard)
-            shard = ImageEnhance.Contrast(shard).enhance(3.0)
-            frame.paste(shard, shard_box)
-        except:
-            pass
+    
+    # boxes can be a single box or a list of boxes
+    if not isinstance(boxes, list):
+        boxes = [boxes]
+        
+    # Fake glitches are slightly less intense (contrast 2.0 vs 3.0)
+    contrast_level = 2.0 if is_fake else 3.0
+    
+    for box in boxes:
+        x1, y1, x2, y2 = box
+        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+        for _ in range(random.randint(4, 9)):
+            w_shard = random.randint(30, 200)
+            h_shard = random.randint(20, 150)
+            sx = cx - w_shard // 2 + random.randint(-60, 60)
+            sy = cy - h_shard // 2 + random.randint(-60, 60)
+            sx = max(0, min(sx, base_img.width - w_shard))
+            sy = max(0, min(sy, base_img.height - h_shard))
+            shard_box = (sx, sy, sx + w_shard, sy + h_shard)
+            try:
+                shard = frame.crop(shard_box).convert("RGB")
+                shard = ImageOps.invert(shard)
+                shard = ImageEnhance.Contrast(shard).enhance(contrast_level)
+                frame.paste(shard, shard_box)
+            except:
+                pass
     return frame
 
 @st.cache_data(show_spinner=False, persist="disk")
-def generate_scaled_gif(img_path, original_box, target_width, level_idx, glitch_seed):
-    """Generates and caches the pulsating glitch GIF."""
+def generate_scaled_gif(img_path, original_boxes, target_width, level_idx, glitch_seed):
+    """Generates and caches the pulsating glitch GIF, including fakes."""
     try:
         random.seed(glitch_seed)
         base_img = Image.open(img_path).convert("RGB")
         scale_factor = target_width / base_img.width
         target_height = int(base_img.height * scale_factor)
         base_img = base_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+        
+        # Scaling the REAL boxes
+        scaled_real_boxes = []
+        for x1, y1, x2, y2 in original_boxes:
+             scaled_real_boxes.append((int(x1 * scale_factor), int(y1 * scale_factor), int(x2 * scale_factor), int(y2 * scale_factor)))
 
-        x1, y1, x2, y2 = original_box
-        scaled_box = (int(x1 * scale_factor), int(y1 * scale_factor), int(x2 * scale_factor), int(y2 * scale_factor))
+        # Generating FAKE boxes (1 for L1/L2, 2 for L3/L4)
+        num_fakes = level_idx + 1 # L1: 1 fake, L2: 2 fakes, L3: 3 fakes, L4: 4 fakes
+        
+        scaled_fake_boxes = []
+        for _ in range(num_fakes):
+            fake_box = generate_fake_glitch_box(level_idx)
+            x1, y1, x2, y2 = fake_box
+            scaled_fake_boxes.append((int(x1 * scale_factor), int(y1 * scale_factor), int(x2 * scale_factor), int(y2 * scale_factor)))
+
 
         frames = []
+        # Create base frames with REAL glitches
         for _ in range(15):
             frames.append(base_img.copy())
+        
+        # Add REAL glitch mutations
         for _ in range(8):
-            frames.append(generate_mutating_frame(base_img, scaled_box))
+            # Pass all real boxes for mutation
+            frames.append(generate_mutating_frame(base_img, original_boxes, is_fake=False)) 
+        
+        # Add FAKE glitch mutations (to make them visible on the GIF)
+        # Note: We apply fake mutations to the frames that *already* have real mutations
+        for i in range(8):
+             frames[15 + i] = generate_mutating_frame(frames[15 + i], scaled_fake_boxes, is_fake=True)
+
 
         temp_file = f"/tmp/lvl_{level_idx}_{glitch_seed}.gif"
         frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15 + [70]*8, loop=0)
 
-        return temp_file, scaled_box
+        # Return the path, the REAL target boxes, and the FAKE boxes
+        return temp_file, scaled_real_boxes, scaled_fake_boxes
     except:
-        return None, None
+        return None, [], []
+
 
 def validate_usn(usn):
     """Basic validation for a typical USN format (e.g., 1MS22AI000)."""
-    # Using regex from previous context
     return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
 
-# --- STREAMLIT WIDGET FUNCTIONS ---
+# --- GOOGLE SHEETS FUNCTIONS (No changes needed here) ---
 
-inject_css()
-
-# Initialize Session State
-if 'game_state' not in st.session_state:
-    st.session_state.update({
-        'game_state': 'menu',
-        'current_level': 0,
-        'start_time': 0.0,
-        'player_tag': 'UNK',
-        'player_name': '', 
-        'player_usn': '',  
-        'final_time': 0.0,
-        'last_move_time': time.time(),
-        'glitch_seed': random.randint(1, 100000),
-        'current_box': get_new_glitch_box(),
-        'hits': 0,
-    })
-
-# --- GOOGLE SHEETS INTEGRATION ---
 conn = None
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
@@ -209,7 +234,6 @@ def save_score(tag, name, usn, time_val):
             conn.write(worksheet="Scores", data=df, append=True)
             return True
         except Exception as e:
-            # st.error(f"Error saving score: {e}")
             return False
     return False
 
@@ -220,59 +244,74 @@ def get_leaderboard():
             df = conn.read(worksheet="Scores", ttl=0).dropna(subset=['Time', 'USN']).copy()
             df['Time'] = pd.to_numeric(df['Time'], errors='coerce')
             df.dropna(subset=['Time'], inplace=True)
-            
-            # Select and format columns
             df = df[['Tag', 'Name', 'USN', 'Time']]
             df.sort_values(by='Time', ascending=True, inplace=True)
             df['Rank'] = range(1, len(df) + 1)
             df['Time'] = df['Time'].apply(lambda x: f"{x:.2f}s")
-            
-            # Reorder columns for display
             return df[['Rank', 'Name', 'USN', 'Time']].head(10).reset_index(drop=True)
         except:
             pass
     return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
 
-def move_glitch():
-    """Moves the target glitch to a new location and updates the seed."""
+
+def move_glitch(num_glitches=1):
+    """Generates 1 or 2 new target glitch boxes."""
     lvl = st.session_state.current_level
     st.session_state.glitch_seed = random.randint(1, 100000)
-    st.session_state.current_box = get_new_glitch_box(level=lvl)
+    
+    # Generate the necessary number of REAL glitch boxes
+    real_boxes = [get_new_glitch_box(level=lvl) for _ in range(num_glitches)]
+    st.session_state.current_boxes = real_boxes
     st.session_state.last_move_time = time.time()
 
-# --- MAIN APP LOGIC ---
+# --- INITIALIZATION & MAIN APP LOGIC ---
+
+inject_css()
+
+# Determine number of real glitches to generate per move
+def get_num_real_targets(level_idx):
+    # Levels 0, 1, 2, 3 correspond to L1, L2, L3, L4
+    if level_idx in [2, 3]: # L3 and L4 (indices 2 and 3)
+        return 2
+    return 1
+
+if 'game_state' not in st.session_state:
+    st.session_state.update({
+        'game_state': 'menu',
+        'current_level': 0,
+        'start_time': 0.0,
+        'player_tag': 'UNK',
+        'player_name': '', 
+        'player_usn': '',  
+        'final_time': 0.0,
+        'last_move_time': time.time(),
+        'glitch_seed': random.randint(1, 100000),
+        # Initializing current_boxes as a list to hold 1 or 2 target boxes
+        'current_boxes': [get_new_glitch_box()], 
+        'hits': 0,
+    })
 
 st.title("DETROIT: ANOMALY [09]")
 
 if st.session_state.game_state == "menu":
     
     st.markdown("### OPERATIVE DATA INPUT")
-    
-    # User Inputs
     tag = st.text_input(">> AGENT TAG (3 CHARS):", value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '', max_chars=3).upper()
     name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
     usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
-    
     is_valid_usn = validate_usn(usn)
     
     start_button = st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag) != 3 or not name or not is_valid_usn))
     
-    # Input validation messages
-    if len(tag) != 3 and tag:
-        st.warning("Tag must be exactly 3 characters.")
-    if usn and not is_valid_usn:
-        st.warning("Invalid USN format. Please check.")
+    if len(tag) != 3 and tag: st.warning("Tag must be exactly 3 characters.")
+    if usn and not is_valid_usn: st.warning("Invalid USN format. Please check.")
         
     if start_button:
-        move_glitch()
+        num_targets = get_num_real_targets(0)
+        move_glitch(num_targets) # Start L1 with 1 target
         st.session_state.update({
-            'game_state': 'playing', 
-            'player_tag': tag, 
-            'player_name': name, 
-            'player_usn': usn,   
-            'start_time': time.time(), 
-            'current_level': 0, 
-            'hits': 0
+            'game_state': 'playing', 'player_tag': tag, 'player_name': name, 
+            'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0
         })
         st.rerun()
         
@@ -287,11 +326,11 @@ if st.session_state.game_state == "menu":
 
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
-    
     if lvl_idx >= len(GLITCHES_PER_LEVEL):
         lvl_idx = len(GLITCHES_PER_LEVEL) - 1
         
     glitches_needed = GLITCHES_PER_LEVEL[lvl_idx]
+    targets_on_screen = get_num_real_targets(lvl_idx) # 1 or 2
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -300,39 +339,66 @@ elif st.session_state.game_state == "playing":
         elapsed_game_time = time.time() - st.session_state.start_time
         st.markdown(f"**TIME: {elapsed_game_time:.1f}s**")
     with col3:
-        st.markdown(f"**LEVEL: {lvl_idx + 1}/{len(GLITCHES_PER_LEVEL)}**") 
+        st.markdown(f"**LEVEL: {lvl_idx + 1}/{len(GLITCHES_PER_LEVEL)} | TARGETS: {targets_on_screen}**") 
 
     hits = st.session_state.hits
     progress_frac = hits / glitches_needed if glitches_needed > 0 else 0
     st.progress(progress_frac, text=f"Glitches Neutralized: {hits} / {glitches_needed}")
 
-    gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx, st.session_state.glitch_seed)
+    # NEW: generate_scaled_gif returns the real boxes and the fake boxes
+    gif_path, scaled_real_boxes, scaled_fake_boxes = generate_scaled_gif(
+        LEVEL_FILES[lvl_idx], st.session_state.current_boxes, GAME_WIDTH, lvl_idx, st.session_state.glitch_seed
+    )
 
-    if gif_path and scaled_box:
+    if gif_path and scaled_real_boxes:
+        # Use a new key to force reload when state changes
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
 
         if coords:
-            x1, y1, x2, y2 = scaled_box
             cx, cy = coords['x'], coords['y']
+            hit_made = False
+            
+            # 1. Check if the click hits any REAL glitch box
+            for x1, y1, x2, y2 in scaled_real_boxes:
+                if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and \
+                   (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
+                    hit_made = True
+                    break
 
-            # Check if the click is within the expanded hit tolerance area
-            if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
+            # 2. Check if the click hits any FAKE glitch box
+            is_fake_hit = False
+            for x1, y1, x2, y2 in scaled_fake_boxes:
+                if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and \
+                   (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
+                    is_fake_hit = True
+                    break
+
+            if hit_made:
                 trigger_static_transition()
                 st.session_state.hits += 1
-                move_glitch() 
                 
+                # Check for completion/new level
                 if st.session_state.hits >= glitches_needed:
-                    # Check if there are more levels in the reduced list (5)
                     if lvl_idx < len(GLITCHES_PER_LEVEL) - 1:
                         st.session_state.current_level += 1
                         st.session_state.hits = 0
+                        next_targets = get_num_real_targets(st.session_state.current_level)
+                        move_glitch(next_targets) # Move to next level, update target count
                     else:
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
+                else:
+                    move_glitch(targets_on_screen) # Next glitch, same level/target count
+                st.rerun()
+            elif is_fake_hit:
+                 # Hitting a fake glitch is just a miss, but specific message
+                st.toast("DECOY NEUTRALIZED. REAL ANOMALY REMAINS.", icon="⚠️")
+                move_glitch(targets_on_screen)
                 st.rerun()
             else:
+                # Normal miss
                 st.toast("MISS! RELOCATING...", icon="❌")
-                move_glitch()
+                move_glitch(targets_on_screen)
                 st.rerun()
     else:
         st.error(f"Error loading level file: {LEVEL_FILES[lvl_idx]}")
