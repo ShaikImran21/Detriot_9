@@ -94,7 +94,7 @@ def trigger_static_transition():
     with placeholder.container():
         st.markdown('<div style="position:fixed;top:0;left:0;width:100%;height:100%;background-color:#111;z-index:10000;"></div>', unsafe_allow_html=True)
         time.sleep(0.1)
-        # Fallback GIF URL if local assets fail
+        # Fallback GIF URL if local assets fails
         g_url = "https://media.giphy.com/media/oEI9uBYSzLpBK/giphy.gif"
         st.markdown(f'<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:url({g_url});background-size:cover;z-index:10001;opacity:0.8;mix-blend-mode:hard-light;"></div>', unsafe_allow_html=True)
         time.sleep(0.4)
@@ -137,7 +137,7 @@ def generate_mutating_frame(base_img, boxes, is_fake=False):
     """
     MODIFIED: Creates a visual difference between real and fake glitches.
     - Real (is_fake=False): Inverted and high contrast (3.0).
-    - Fake (is_fake=True): No inversion and moderate contrast (1.5).
+    - Fake (is_fake=True): Inverted but low contrast (1.0).
     """
     frame = base_img.copy()
     
@@ -146,7 +146,7 @@ def generate_mutating_frame(base_img, boxes, is_fake=False):
         boxes = [boxes]
         
     # Set visual parameters based on type
-    contrast_level = 1.5 if is_fake else 3.0
+    contrast_level = 1.0 if is_fake else 3.0 # Fake is 1.0 (minimal contrast boost)
     
     for box in boxes:
         x1, y1, x2, y2 = box
@@ -162,11 +162,10 @@ def generate_mutating_frame(base_img, boxes, is_fake=False):
             try:
                 shard = frame.crop(shard_box).convert("RGB")
                 
-                if not is_fake:
-                    # REAL glitch: High contrast, inverted colors
-                    shard = ImageOps.invert(shard) 
+                # BOTH real and fake glitches are inverted for confusion
+                shard = ImageOps.invert(shard) 
                 
-                # Apply contrast
+                # Apply contrast (low for fake, high for real)
                 shard = ImageEnhance.Contrast(shard).enhance(contrast_level)
                 frame.paste(shard, shard_box)
             except:
@@ -208,7 +207,7 @@ def generate_scaled_gif(img_path, original_boxes, target_width, level_idx, glitc
             # Start with the real glitch mutation (inverted/high contrast)
             mutated_frame = generate_mutating_frame(base_img, original_boxes, is_fake=False)
             
-            # Layer the fake glitch mutation (non-inverted/low contrast) on top
+            # Layer the fake glitch mutation (inverted/low contrast) on top
             mutated_frame = generate_mutating_frame(mutated_frame, scaled_fake_boxes, is_fake=True)
             frames.append(mutated_frame)
 
