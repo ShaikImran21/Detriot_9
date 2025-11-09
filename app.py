@@ -66,7 +66,6 @@ def trigger_static_transition():
         time.sleep(0.4)
     placeholder.empty()
 
-# Returns box (x1,y1,x2,y2) with random size and position, shrinks with level
 def get_new_glitch_box(level=0):
     max_size = max(250 - level * 20, 50)
     min_size = max(100 - level * 10, 30)
@@ -206,7 +205,7 @@ elif st.session_state.game_state == "playing":
 
             cx_center = (x1 + x2) / 2
             cy_center = (y1 + y2) / 2
-            radius = min(x2 - x1, y2 - y1) / 3
+            radius = min(x2 - x1, y2 - y1) / 2  # Increased hitbox radius to half glitch size
 
             dx = cx - cx_center
             dy = cy - cy_center
