@@ -200,10 +200,10 @@ elif st.session_state.game_state == "playing":
                  st.session_state.glitch_seed = random.randint(1, 100000)
                  st.session_state.current_box = get_new_glitch_box()
                  st.session_state.last_move_time = time.time()
-                 time.sleep(3.0)
+                 time.sleep(10.0)
                  st.rerun()
                  
-    time.sleep(3.0)
+    time.sleep(10.0)
     st.rerun()
 
 elif st.session_state.game_state == "game_over":
