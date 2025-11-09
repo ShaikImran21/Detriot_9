@@ -11,7 +11,7 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 700
-HIT_TOLERANCE = 0  # Circular hitbox handled separately
+HIT_TOLERANCE = 0  # Circular hitbox
 
 LEVEL_FILES = [
     "assets/level1.png", "assets/level2.png", "assets/level3.png",
@@ -67,8 +67,9 @@ def trigger_static_transition():
     placeholder.empty()
 
 def get_new_glitch_box(level=0):
-    max_size = max(250 - level * 20, 50)
-    min_size = max(100 - level * 10, 30)
+    # Bigger range for size randomized per reload
+    max_size = max(350 - level * 30, 80)
+    min_size = max(120 - level * 15, 50)
     w = random.randint(min_size, max_size)
     h = random.randint(min_size, max_size)
     x1 = random.randint(50, 1024 - w - 50)
@@ -205,7 +206,7 @@ elif st.session_state.game_state == "playing":
 
             cx_center = (x1 + x2) / 2
             cy_center = (y1 + y2) / 2
-            radius = min(x2 - x1, y2 - y1) / 3  # Hitbox 1/3 size of glitch box
+            radius = min(x2 - x1, y2 - y1) / 3
 
             dx = cx - cx_center
             dy = cy - cy_center
@@ -215,7 +216,7 @@ elif st.session_state.game_state == "playing":
                 st.session_state.glitch_active = False
                 trigger_static_transition()
                 st.session_state.hits += 1
-                move_glitch()  # ONLY reload glitch on static screen
+                move_glitch()
                 if st.session_state.hits >= glitches_needed:
                     if lvl_idx < len(GLITCHES_PER_LEVEL) - 1:
                         st.session_state.current_level += 1
@@ -225,8 +226,7 @@ elif st.session_state.game_state == "playing":
                         st.session_state.game_state = 'game_over'
                 st.rerun()
             else:
-                st.toast("MISS! PLEASE CLICK AGAIN", icon="❌")
-                # Here, DO NOT move glitch on miss to keep glitch stationary
+                move_glitch()
                 st.rerun()
 
 elif st.session_state.game_state == "game_over":
