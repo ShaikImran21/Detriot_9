@@ -48,6 +48,12 @@ def inject_css():
             color: #d0d0d0;
             font-weight: bold;
         }
+        table.dataframe thead th {
+            background-color: #080808;
+            font-family: 'Courier New', monospace;
+            color: #d0d0d0;
+            animation: glitch-text 500ms infinite;
+        }
         @keyframes glitch-text {
             0%,14% { text-shadow: 0.05em 0 0 #f44, -0.05em -0.025em 0 #2f2, 0.025em 0.05em 0 #34f; }
             15%,49% { text-shadow: -0.05em -0.025em 0 #f44, 0.025em 0.025em 0 #2f2, -0.05em -0.05em 0 #34f; }
@@ -141,7 +147,6 @@ if 'game_state' not in st.session_state:
         'current_box': get_new_glitch_box(),
         'hits': 0,
         'glitch_active': True,
-        'save_time_input': ''
     })
 
 conn = None
@@ -249,7 +254,7 @@ elif st.session_state.game_state == 'playing':
                 # Do not move glitch or reload level on miss
                 st.stop()
 
-elif st.session_state.game_game == 'game_over':  # corrected variable name from 'game_game' to 'game_state'
+elif st.session_state.game_state == 'game_over':
     st.balloons()
     st.markdown('<div class="glitch-text">SAVE YOUR TIME</div>', unsafe_allow_html=True)
     save_time = st.text_input("NAME FOR SCOREBOARD:", max_chars=20, value=st.session_state.player_name)
@@ -260,6 +265,6 @@ elif st.session_state.game_game == 'game_over':  # corrected variable name from 
             st.stop()
         else:
             st.error("FAILED TO SAVE SCORE.")
-    st.markdown("### GLOBAL LEADERBOARD")
+    st.markdown('<div class="glitch-text">### GLOBAL LEADERBOARD</div>', unsafe_allow_html=True)
     leaderboard_df = get_leaderboard()
     st.dataframe(leaderboard_df, use_container_width=True)
