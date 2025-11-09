@@ -11,7 +11,7 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 700
-HIT_TOLERANCE = 45  # Circular hitbox
+HIT_TOLERANCE = 0
 
 LEVEL_FILES = [
     "assets/level1.png", "assets/level2.png", "assets/level3.png",
@@ -179,7 +179,8 @@ if st.session_state.game_state == "menu":
             move_glitch()
             st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(),
                                      'current_level': 0, 'hits': 0, 'glitch_active': True})
-            st.rerun()
+            st.experimental_rerun()
+
     st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
 
 elif st.session_state.game_state == "playing":
@@ -224,10 +225,10 @@ elif st.session_state.game_state == "playing":
                     else:
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
-                st.rerun()
+                st.experimental_rerun()
             else:
                 # Do not move glitch or reload level on miss
-                st.rerun()
+                st.experimental_rerun()
 
 elif st.session_state.game_state == "game_over":
     st.balloons()
@@ -239,6 +240,6 @@ elif st.session_state.game_state == "game_over":
             st.error("UPLOAD FAILED.")
         time.sleep(2)
         st.session_state.game_state = 'menu'
-        st.rerun()
+        st.experimental_rerun()
     st.markdown("### GLOBAL RANKINGS")
     st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
