@@ -2,7 +2,6 @@ import streamlit as st
 import time
 import pandas as pd
 import random
-import os
 import base64
 from PIL import Image, ImageOps, ImageEnhance
 from streamlit_gsheets import GSheetsConnection
@@ -179,6 +178,7 @@ def move_glitch():
     st.session_state.last_move_time = time.time()
 
 st.markdown('<h1 class="glitch-text">DETROIT: ANOMALY [09]</h1>', unsafe_allow_html=True)
+
 if st.session_state.game_state == "menu":
     st.markdown('<div class="glitch-text">ENTER YOUR NAME</div>', unsafe_allow_html=True)
     name = st.text_input("NAME:", max_chars=20, value=st.session_state.player_name)
@@ -189,24 +189,19 @@ if st.session_state.game_state == "menu":
             st.session_state.player_name = name.strip()
             st.session_state.player_usn = usn.strip()
             move_glitch()
-            st.session_state.update({'game_state': 'playing', 'start_time': time.time(), 'current_level': 0, 'hits': 0, 'glitch_active': True})
+            st.session_state.update({'game_state': 'playing', 'start_time': time.time(), 'current_level': 0,
+                                    'hits': 0, 'glitch_active': True})
             st.rerun()
         else:
             st.warning("Please enter both Name and USN")
 
-    # <<<<<<<< Display leaderboard always on title screen >>>>>>>>>
-    leaderboard_df = get_leaderboard()
-    st.markdown('<div class="glitch-text" style="font-size:1.25rem;margin-top:40px;">GLOBAL LEADERBOARD</div>', unsafe_allow_html=True)
-    if not leaderboard_df.empty:
-        st.dataframe(leaderboard_df, use_container_width=True)
-    else:
-        st.markdown('<div class="glitch-text">No scores yet.</div>', unsafe_allow_html=True)
-
-    # <<<<<<<<<< Leaderboard for MENU section >>>>>>>>>>>
     leaderboard_df = get_leaderboard()
     if not leaderboard_df.empty:
         st.markdown('<div class="glitch-text">GLOBAL LEADERBOARD</div>', unsafe_allow_html=True)
         st.dataframe(leaderboard_df, use_container_width=True)
+    else:
+        st.markdown('<div class="glitch-text">No scores yet.</div>', unsafe_allow_html=True)
+
 
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
@@ -221,11 +216,12 @@ elif st.session_state.game_state == "playing":
     progress_frac = hits / glitches_needed if glitches_needed > 0 else 0
     st.progress(progress_frac, text=f"Glitches: {hits} / {glitches_needed}")
 
-    gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx,
-                                               st.session_state.glitch_seed)
+    gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH,
+                                               lvl_idx, st.session_state.glitch_seed)
 
     if gif_path and scaled_box:
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
+
         if coords and st.session_state.glitch_active:
             x1, y1, x2, y2 = scaled_box
             cx, cy = coords['x'], coords['y']
@@ -243,6 +239,7 @@ elif st.session_state.game_state == "playing":
                 trigger_static_transition()
                 st.session_state.hits += 1
                 move_glitch()
+
                 if st.session_state.hits >= glitches_needed:
                     if lvl_idx < len(GLITCHES_PER_LEVEL) - 1:
                         st.session_state.current_level += 1
@@ -252,20 +249,25 @@ elif st.session_state.game_state == "playing":
                         st.session_state.game_state = "game_over"
                 st.rerun()
             else:
-                # Do not move glitch or reload level on miss
+                st.toast("MISS! RELOCATING...", icon="❌")
+                move_glitch()
                 st.rerun()
 
-elif st.session_state.game_game == "game_over":
+
+elif st.session_state.game_state == "game_over":
     st.balloons()
     st.markdown('<div class="glitch-text">SAVE YOUR TIME</div>', unsafe_allow_html=True)
-    save_time = st.text_input("NAME FOR SCOREBOARD:", max_chars=20, value=st.session_state.player_name)
+    save_display_name = st.text_input("NAME FOR SCOREBOARD:", max_chars=20, value=st.session_state.player_name)
     if st.button("SAVE SCORE"):
-        if save_score(save_time, st.session_state.player_usn, st.session_state.final_time):
+        if save_score(save_display_name, st.session_state.player_usn, st.session_state.final_time):
             st.success("SCORE SAVED!")
-            st.session_state.game_game = "menu"
+            st.session_state.game_state = "menu"
             st.rerun()
         else:
             st.error("FAILED TO SAVE SCORE.")
-    st.markdown('<div class="glitch-text">GLOBAL LEADERBOARD</div>', unsafe_allow_html=True)
     leaderboard_df = get_leaderboard()
-    st.dataframe(leaderboard_df, use_container_width=True)
+    if not leaderboard_df.empty:
+        st.markdown('<div class="glitch-text">GLOBAL LEADERBOARD</div>', unsafe_allow_html=True)
+        st.dataframe(leaderboard_df, use_container_width=True)
+    else:
+        st.markdown('<div class="glitch-text">No scores yet.</div>', unsafe_allow_html=True)
