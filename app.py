@@ -12,7 +12,7 @@ st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initia
 
 # --- SETTINGS ---
 GAME_WIDTH = 700
-HIT_TOLERANCE = 50 
+HIT_TOLERANCE = 100 
 MOVE_DELAY = 15.0 # Glitch teleports every 4 seconds
 ORIGINAL_IMG_SIZE = 1024 
 
