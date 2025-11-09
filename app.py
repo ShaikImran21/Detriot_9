@@ -12,9 +12,9 @@ st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initia
 
 # --- SETTINGS ---
 GAME_WIDTH = 700
-HIT_TOLERANCE = 0   # Hardcore: Click exactly on the glitch.
-MOVE_DELAY = 4      # Glitch moves every 4 seconds.
-IMG_SIZE = 1024     # Native image size.
+HIT_TOLERANCE = 0  # Hardcore: Exact hits only.
+MOVE_DELAY = 4.0   # Glitch teleports every 4 seconds automatically.
+IMG_SIZE = 1024    # Native image size assumption.
 
 # --- HELPER: ASSET LOADER ---
 def get_base64(bin_file):
@@ -61,11 +61,12 @@ def trigger_static_transition():
         time.sleep(0.4)
     placeholder.empty()
 
-# --- RANDOM BOX GENERATOR ---
+# --- RANDOM LOCATION GENERATOR ---
 def get_new_glitch_box():
-    # Highly variable size (from tiny 50px to large 250px)
-    w = random.randint(50, 250)
-    h = random.randint(50, 250)
+    # Random size every time it moves
+    w = random.randint(60, 200)
+    h = random.randint(60, 200)
+    # Random position every time
     x1 = random.randint(50, IMG_SIZE - w - 50)
     y1 = random.randint(50, IMG_SIZE - h - 50)
     return (x1, y1, x1 + w, y1 + h)
@@ -76,9 +77,10 @@ def generate_mutating_frame(base_img, box):
     x1, y1, x2, y2 = box
     cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
     
+    # Generate random shards clustered around the center point
     for _ in range(random.randint(4, 9)):
-        w_shard = random.randint(int((x2-x1)*0.5), int((x2-x1)*1.5))
-        h_shard = random.randint(int((y2-y1)*0.5), int((y2-y1)*1.5))
+        w_shard = random.randint(int((x2-x1)*0.4), int((x2-x1)*1.2))
+        h_shard = random.randint(int((y2-y1)*0.4), int((y2-y1)*1.2))
         sx = max(0, min(cx - w_shard // 2 + random.randint(-40, 40), base_img.width - w_shard))
         sy = max(0, min(cy - h_shard // 2 + random.randint(-40, 40), base_img.height - h_shard))
         shard_box = (sx, sy, sx + w_shard, sy + h_shard)
@@ -92,6 +94,7 @@ def generate_mutating_frame(base_img, box):
 
 @st.cache_data(show_spinner=False, persist="disk")
 def generate_scaled_gif(img_path, original_box, target_width, level_idx, glitch_seed):
+    # glitch_seed ensures a new GIF is made every time it moves
     try:
         random.seed(glitch_seed)
         base_img = Image.open(img_path).convert("RGB")
@@ -103,11 +106,13 @@ def generate_scaled_gif(img_path, original_box, target_width, level_idx, glitch_
         scaled_box = (int(x1 * scale_factor), int(y1 * scale_factor), int(x2 * scale_factor), int(y2 * scale_factor))
 
         frames = []
+        # 15 frames normal (approx 3s wait)
         for _ in range(15): frames.append(base_img.copy())
+        # 8 frames chaotic mutation (approx 0.8s visible)
         for _ in range(8): frames.append(generate_mutating_frame(base_img, scaled_box))
             
         temp_file = f"lvl_{level_idx}_{glitch_seed}.gif"
-        frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15 + [70]*8, loop=0)
+        frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15 + [100]*8, loop=0)
         return temp_file, scaled_box
     except: return None, None
 
@@ -123,7 +128,8 @@ inject_css()
 if 'game_state' not in st.session_state:
     st.session_state.update({
         'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'final_time': 0.0,
-        'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000),
+        'last_move_time': time.time(), 
+        'glitch_seed': random.randint(1, 100000),
         'current_box': get_new_glitch_box()
     })
 
@@ -149,9 +155,10 @@ def get_leaderboard():
 # --- GAME LOOP ---
 st.title("DETROIT: ANOMALY [09]")
 
-# AUTO-TELEPORT LOGIC
+# AUTO-TELEPORT LOGIC (Runs on every interaction to check time)
 if st.session_state.game_state == 'playing':
     if time.time() - st.session_state.last_move_time > MOVE_DELAY:
+        # Time is up! Move the glitch.
         st.session_state.glitch_seed = random.randint(1, 100000)
         st.session_state.current_box = get_new_glitch_box()
         st.session_state.last_move_time = time.time()
@@ -161,7 +168,11 @@ if st.session_state.game_state == "menu":
     tag = st.text_input("OPERATIVE TAG (3 CHARS):", max_chars=3).upper()
     if st.button(">> START SIMULATION <<", type="primary"):
         if len(tag) == 3:
-            st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 'current_level': 0, 'last_move_time': time.time(), 'current_box': get_new_glitch_box()})
+            st.session_state.update({
+                'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 
+                'current_level': 0, 'last_move_time': time.time(), 
+                'current_box': get_new_glitch_box(), 'glitch_seed': random.randint(1, 100000)
+            })
             st.rerun()
     st.markdown("### TOP AGENTS")
     st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
@@ -173,7 +184,9 @@ elif st.session_state.game_state == "playing":
     gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx, st.session_state.glitch_seed)
 
     if gif_path and scaled_box:
+        # Key must include seed so component reloads when glitch moves
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
+        
         if coords:
             x1, y1, x2, y2 = scaled_box
             if (x1 - HIT_TOLERANCE) <= coords['x'] <= (x2 + HIT_TOLERANCE) and \
@@ -181,6 +194,9 @@ elif st.session_state.game_state == "playing":
                 trigger_static_transition()
                 if lvl_idx < 8: 
                     st.session_state.current_level += 1
+                    # New level = new random glitch
+                    st.session_state.glitch_seed = random.randint(1, 100000)
+                    st.session_state.current_box = get_new_glitch_box()
                     st.session_state.last_move_time = time.time()
                     st.rerun()
                 else: 
@@ -188,13 +204,16 @@ elif st.session_state.game_state == "playing":
                     st.session_state.game_state = 'game_over'
                     st.rerun()
             else:
-                 # Missed click -> Teleport immediately
+                 # Missed click = Teleport immediately
                  st.session_state.glitch_seed = random.randint(1, 100000)
                  st.session_state.current_box = get_new_glitch_box()
                  st.session_state.last_move_time = time.time()
+                 st.toast("ANOMALY SHIFTED.", icon="⚠️")
+                 time.sleep(0.5)
                  st.rerun()
-
-    time.sleep(0.1)
+    
+    # Keep the loop alive to check for auto-teleport every 1s
+    time.sleep(1) 
     st.rerun()
 
 elif st.session_state.game_state == "game_over":
