@@ -194,10 +194,11 @@ if st.session_state.game_state == "menu":
             st.rerun()
         else:
             st.warning("Please enter both Name and USN")
-    lb = get_leaderboard()
-    if not lb.empty:
+    # <<<<<<<<<< Leaderboard for MENU section >>>>>>>>>>>
+    leaderboard_df = get_leaderboard()
+    if not leaderboard_df.empty:
         st.markdown('<div class="glitch-text">GLOBAL LEADERBOARD</div>', unsafe_allow_html=True)
-        st.dataframe(lb, use_container_width=True)
+        st.dataframe(leaderboard_df, use_container_width=True)
 
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
