@@ -134,19 +134,13 @@ def generate_fake_glitch_box(level=0):
 
 
 def generate_mutating_frame(base_img, boxes, is_fake=False):
-    """
-    MODIFIED: Creates a visual difference between real and fake glitches.
-    - Real (is_fake=False): Inverted and high contrast (3.0).
-    - Fake (is_fake=True): Inverted but low contrast (1.0).
-    """
+    """Creates a visual difference between real and fake glitches."""
     frame = base_img.copy()
     
-    # boxes can be a single box or a list of boxes
     if not isinstance(boxes, list):
         boxes = [boxes]
         
-    # Set visual parameters based on type
-    contrast_level = 1.0 if is_fake else 3.0 # Fake is 1.0 (minimal contrast boost)
+    contrast_level = 1.0 if is_fake else 3.0 # Low contrast (1.0) for confusing fake
     
     for box in boxes:
         x1, y1, x2, y2 = box
@@ -162,7 +156,7 @@ def generate_mutating_frame(base_img, boxes, is_fake=False):
             try:
                 shard = frame.crop(shard_box).convert("RGB")
                 
-                # BOTH real and fake glitches are inverted for confusion
+                # Both real and fake are inverted for confusion
                 shard = ImageOps.invert(shard) 
                 
                 # Apply contrast (low for fake, high for real)
@@ -224,13 +218,14 @@ def validate_usn(usn):
     """Basic validation for a typical USN format (e.g., 1MS22AI000)."""
     return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
 
-# --- GOOGLE SHEETS FUNCTIONS ---
+# --- GOOGLE SHEETS FUNCTIONS (Modified to allow graceful failure) ---
 
 conn = None
 try:
+    # Attempt to establish the connection once at startup
     conn = st.connection("gsheets", type=GSheetsConnection)
-except:
-    pass
+except Exception:
+    pass # Allow conn to be None if secrets aren't set
 
 def save_score(tag, name, usn, time_val):
     """Saves the score, name, and USN to the Google Sheet."""
@@ -239,7 +234,7 @@ def save_score(tag, name, usn, time_val):
             df = pd.DataFrame([{"Tag": tag, "Name": name, "USN": usn, "Time": time_val}])
             conn.write(worksheet="Scores", data=df, append=True)
             return True
-        except Exception as e:
+        except Exception:
             return False
     return False
 
@@ -247,6 +242,7 @@ def get_leaderboard():
     """Fetches, cleans, and sorts the leaderboard data."""
     if conn:
         try:
+            # We use conn.read to also verify the connection status
             df = conn.read(worksheet="Scores", ttl=0).dropna(subset=['Time', 'USN']).copy()
             df['Time'] = pd.to_numeric(df['Time'], errors='coerce')
             df.dropna(subset=['Time'], inplace=True)
@@ -255,8 +251,8 @@ def get_leaderboard():
             df['Rank'] = range(1, len(df) + 1)
             df['Time'] = df['Time'].apply(lambda x: f"{x:.2f}s")
             return df[['Rank', 'Name', 'USN', 'Time']].head(10).reset_index(drop=True)
-        except:
-            pass
+        except Exception:
+            pass # Return an empty DataFrame on read failure
     return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
 
 
@@ -274,7 +270,6 @@ def move_glitch(num_glitches=1):
 
 inject_css()
 
-# Determine number of real glitches to generate per move
 def get_num_real_targets(level_idx):
     # Levels 0, 1, 2, 3 correspond to L1, L2, L3, L4
     if level_idx in [2, 3]: # L3 and L4 (indices 2 and 3)
@@ -292,7 +287,6 @@ if 'game_state' not in st.session_state:
         'final_time': 0.0,
         'last_move_time': time.time(),
         'glitch_seed': random.randint(1, 100000),
-        # Initializing current_boxes as a list to hold 1 or 2 target boxes
         'current_boxes': [get_new_glitch_box()], 
         'hits': 0,
     })
@@ -323,12 +317,21 @@ if st.session_state.game_state == "menu":
         
     st.markdown("---")
     st.markdown("### GLOBAL RANKINGS")
+    
+    # --- INTEGRATED CONNECTION STATUS CHECK ---
     leaderboard_df = get_leaderboard()
-    if not leaderboard_df.empty:
+    
+    if conn and not leaderboard_df.empty:
+        st.success("✅ Online Leaderboard (Scores Sheet Connection OK)")
         leaderboard_df.columns = ["Rank", "Name", "USN", "Time"]
         st.dataframe(leaderboard_df, hide_index=True, use_container_width=True)
+    elif conn and leaderboard_df.empty:
+         st.warning("⚠️ Online Connection OK, but Leaderboard is empty or Read Failed.")
+         st.info("Ensure the **Scores** sheet has the headers: **Tag, Name, USN, Time** in row 1.")
     else:
-        st.info("Leaderboard is empty or connection failed.")
+        st.error("❌ Leaderboard Connection Failed. (Check secrets.toml/sharing permissions)")
+        st.dataframe(leaderboard_df, hide_index=True, use_container_width=True) # Shows empty table
+    # --- END STATUS CHECK ---
 
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
@@ -351,13 +354,11 @@ elif st.session_state.game_state == "playing":
     progress_frac = hits / glitches_needed if glitches_needed > 0 else 0
     st.progress(progress_frac, text=f"Glitches Neutralized: {hits} / {glitches_needed}")
 
-    # NEW: generate_scaled_gif returns the real boxes and the fake boxes
     gif_path, scaled_real_boxes, scaled_fake_boxes = generate_scaled_gif(
         LEVEL_FILES[lvl_idx], st.session_state.current_boxes, GAME_WIDTH, lvl_idx, st.session_state.glitch_seed
     )
 
     if gif_path and scaled_real_boxes:
-        # Use a new key to force reload when state changes
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
 
         if coords:
@@ -383,26 +384,23 @@ elif st.session_state.game_state == "playing":
                 trigger_static_transition()
                 st.session_state.hits += 1
                 
-                # Check for completion/new level
                 if st.session_state.hits >= glitches_needed:
                     if lvl_idx < len(GLITCHES_PER_LEVEL) - 1:
                         st.session_state.current_level += 1
                         st.session_state.hits = 0
                         next_targets = get_num_real_targets(st.session_state.current_level)
-                        move_glitch(next_targets) # Move to next level, update target count
+                        move_glitch(next_targets) 
                     else:
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
                 else:
-                    move_glitch(targets_on_screen) # Next glitch, same level/target count
+                    move_glitch(targets_on_screen) 
                 st.rerun()
             elif is_fake_hit:
-                 # Hitting a fake glitch is just a miss, but specific message
                 st.toast("DECOY NEUTRALIZED. REAL ANOMALY REMAINS.", icon="⚠️")
                 move_glitch(targets_on_screen)
                 st.rerun()
             else:
-                # Normal miss
                 st.toast("MISS! RELOCATING...", icon="❌")
                 move_glitch(targets_on_screen)
                 st.rerun()
@@ -417,18 +415,23 @@ elif st.session_state.game_state == "game_over":
     st.write(f"**USN:** {st.session_state.player_usn}")
     st.write(f"**FINAL TIME:** {st.session_state.final_time:.2f}s")
     
+    upload_success = True # Assume success unless proven otherwise
+    
     if st.button(">> UPLOAD SCORE <<", type="primary"):
         with st.spinner("TRANSMITTING DATA..."):
-            if save_score(st.session_state.player_tag, st.session_state.player_name, st.session_state.player_usn, st.session_state.final_time):
+            upload_success = save_score(st.session_state.player_tag, st.session_state.player_name, st.session_state.player_usn, st.session_state.final_time)
+
+            if upload_success:
                 st.success("DATA UPLOADED. MISSION SUCCESSFUL.")
             else:
-                st.error("UPLOAD FAILED. CONNECTION ERROR.")
+                st.error("UPLOAD FAILED. CONNECTION ERROR. (Check connection status on menu screen.)")
         time.sleep(1.5)
         st.session_state.game_state = 'menu'
         st.rerun()
         
     st.markdown("---")
     st.markdown("### GLOBAL RANKINGS")
+    
     leaderboard_df = get_leaderboard()
     if not leaderboard_df.empty:
         leaderboard_df.columns = ["Rank", "Name", "USN", "Time"]
