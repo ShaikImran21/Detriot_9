@@ -9,11 +9,9 @@ from streamlit_gsheets import GSheetsConnection
 from streamlit_image_coordinates import streamlit_image_coordinates
 
 
-st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
-
 # --- SETTINGS ---
 GAME_WIDTH = 700
-HIT_TOLERANCE = 100
+HIT_TOLERANCE = 80  # Increased tolerance for easier click detection
 MOVE_DELAY = 15  # seconds before glitch teleports
 
 
@@ -25,7 +23,7 @@ LEVEL_IMGS = [
 ]
 
 
-# --- HELPER: ASSET LOADER ---
+# --- HELPER ---
 def get_base64(bin_file):
     try:
         with open(bin_file, 'rb') as f:
@@ -34,33 +32,31 @@ def get_base64(bin_file):
         return None
 
 
-# --- CSS: RETRO EFFECTS ---
 def inject_css():
     st.markdown("""
-        <style>
-            .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
-            #MainMenu, footer, header {visibility: hidden;}
-            .block-container { justify-content: center; align-items: center; display: flex; flex-direction: column; }
-            .stApp::after {
-                content: " "; display: block; position: fixed; top: 0; left: 0; bottom: 0; right: 0;
-                background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-                z-index: 999; background-size: 100% 3px, 3px 100%; pointer-events: none; opacity: 0.15;
-            }
-            h1 { animation: glitch-text 500ms infinite; }
-            @keyframes glitch-text {
-                0% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.05em -0.025em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
-                14% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.05em -0.025em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
-                15% { text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }
-                49% { text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }
-                50% { text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }
-                99% { text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }
-                100% { text-shadow: -0.025em 0 0 rgba(255,0,0,0.75), -0.025em -0.025em 0 rgba(0,255,0,0.75), -0.025em -0.05em 0 rgba(0,0,255,0.75); }
-            }
-        </style>
+    <style>
+        .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
+        #MainMenu, footer, header {visibility: hidden;}
+        .block-container { justify-content: center; align-items: center; display: flex; flex-direction: column; }
+        .stApp::after {
+            content: " "; display: block; position: fixed; top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 999; background-size: 100% 3px, 3px 100%; pointer-events: none; opacity: 0.15;
+        }
+        h1 { animation: glitch-text 500ms infinite; }
+        @keyframes glitch-text {
+            0% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.05em -0.025em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
+            14% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.05em -0.025em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
+            15% { text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }
+            49% { text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }
+            50% { text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }
+            99% { text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }
+            100% { text-shadow: -0.025em 0 0 rgba(255,0,0,0.75), -0.025em -0.025em 0 rgba(0,255,0,0.75), -0.025em -0.05em 0 rgba(0,0,255,0.75); }
+        }
+    </style>
     """, unsafe_allow_html=True)
 
 
-# --- TRANSITION ---
 def trigger_static_transition():
     st.markdown('<audio src="https://www.myinstants.com/media/sounds/static-noise.mp3" autoplay style="display:none;"></audio>', unsafe_allow_html=True)
     placeholder = st.empty()
@@ -75,7 +71,6 @@ def trigger_static_transition():
     placeholder.empty()
 
 
-# --- RANDOM LOCATION GENERATOR ---
 def get_new_glitch_box():
     w = random.randint(80, 180)
     h = random.randint(80, 180)
@@ -84,7 +79,6 @@ def get_new_glitch_box():
     return (x1, y1, x1 + w, y1 + h)
 
 
-# --- CHAOS GENERATOR ---
 def generate_mutating_frame(base_img, box):
     frame = base_img.copy()
     x1, y1, x2, y2 = box
@@ -125,18 +119,23 @@ def generate_scaled_gif(img_path, box, target_width, level_idx, glitch_seed):
         for _ in range(8): frames.append(base_img.copy())
         for _ in range(6): frames.append(generate_mutating_frame(base_img, scaled_box))
             
-        temp_file = f"/tmp/lvl_{level_idx}_{glitch_seed}.gif"  # <--- Changed this line only for cloud compatibility
+        temp_file = f"/tmp/lvl_{level_idx}_{glitch_seed}.gif"  # saved in /tmp for Streamlit Cloud compatibility
         frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*8 + [80]*6, loop=0)
         return temp_file, scaled_box
     except:
         return None, None
 
 
-# --- INIT ---
 inject_css()
+
+
 if 'game_state' not in st.session_state:
     st.session_state.update({
-        'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'final_time': 0.0,
+        'game_state': 'menu',
+        'current_level': 0,
+        'start_time': 0.0,
+        'player_tag': 'UNK',
+        'final_time': 0.0,
         'last_move_time': time.time(),
         'glitch_seed': random.randint(1, 100000),
     })
@@ -172,7 +171,6 @@ elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
 
 
-    # Store glitch box persistent per glitch_seed in session state
     if 'current_box' not in st.session_state or st.session_state.get('stored_seed') != st.session_state.glitch_seed:
         random.seed(st.session_state.glitch_seed)
         st.session_state.current_box = get_new_glitch_box()
@@ -191,8 +189,9 @@ elif st.session_state.game_state == "playing":
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
         if coords:
             x1, y1, x2, y2 = scaled_box
-            if (x1 - HIT_TOLERANCE) <= coords['x'] <= (x2 + HIT_TOLERANCE) and \
-               (y1 - HIT_TOLERANCE) <= coords['y'] <= (y2 + HIT_TOLERANCE):
+            st.write(f"Click coordinates: {coords}")  # Debug output
+            st.write(f"Glitch box bounds: {scaled_box}")  # Debug output
+            if (x1 - HIT_TOLERANCE) <= coords['x'] <= (x2 + HIT_TOLERANCE) and (y1 - HIT_TOLERANCE) <= coords['y'] <= (y2 + HIT_TOLERANCE):
                 trigger_static_transition()
                 if lvl_idx < 8:
                     st.session_state.current_level += 1
