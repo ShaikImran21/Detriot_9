@@ -1,4 +1,3 @@
-
 import streamlit as st
 import time
 import pandas as pd
@@ -180,7 +179,7 @@ def move_glitch():
     st.session_state.glitch_active = True
     st.session_state.last_move_time = time.time()
 
-st.title('DETROIT: ANOMALY [09]')
+st.markdown('<h1 class="glitch-text">DETROIT: ANOMALY [09]</h1>', unsafe_allow_html=True)
 
 if st.session_state.game_state == 'menu':
     st.markdown('<div class="glitch-text">ENTER YOUR NAME</div>', unsafe_allow_html=True)
@@ -257,7 +256,7 @@ elif st.session_state.game_state == 'game_over':
     if st.button("SAVE SCORE"):
         if save_score(save_time, st.session_state.player_usn, st.session_state.final_time):
             st.success("SCORE SAVED!")
-            st.session_state.game_state = 'menu'
+            st.session_state.game_game = 'menu'
             st.experimental_rerun()
         else:
             st.error("FAILED TO SAVE SCORE.")
