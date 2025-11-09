@@ -179,7 +179,7 @@ if st.session_state.game_state == "menu":
             move_glitch()
             st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(),
                                      'current_level': 0, 'hits': 0, 'glitch_active': True})
-            st.experimental_rerun()
+            st.stop()
 
     st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
 
@@ -225,10 +225,10 @@ elif st.session_state.game_state == "playing":
                     else:
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
-                st.experimental_rerun()
+                st.stop()
             else:
                 # Do not move glitch or reload level on miss
-                st.experimental_rerun()
+                st.stop()
 
 elif st.session_state.game_state == "game_over":
     st.balloons()
@@ -240,6 +240,6 @@ elif st.session_state.game_state == "game_over":
             st.error("UPLOAD FAILED.")
         time.sleep(2)
         st.session_state.game_state = 'menu'
-        st.experimental_rerun()
+        st.stop()
     st.markdown("### GLOBAL RANKINGS")
     st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
