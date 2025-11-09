@@ -7,22 +7,27 @@ import base64
 from PIL import Image, ImageOps, ImageEnhance
 from streamlit_gsheets import GSheetsConnection
 from streamlit_image_coordinates import streamlit_image_coordinates
+import re 
 
+# --- CONFIGURATION ---
 st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 700
 HIT_TOLERANCE = 100
 
-# MODIFIED: Reduced to 5 levels
+# MODIFIED: Reduced to 5 levels (level1 to level5)
 LEVEL_FILES = [
     "assets/level1.png", "assets/level2.png", "assets/level3.png",
     "assets/level4.png", "assets/level5.png"
 ]
 
-# MODIFIED: 5 levels with a total of 30 glitches (4+5+6+7+8)
+# MODIFIED: 5 levels with a total of 30 glitches (4+5+6+7+8) for ~3 minute play time.
 GLITCHES_PER_LEVEL = [4, 5, 6, 7, 8] 
 
+# --- HELPER FUNCTIONS ---
+
 def get_base64(bin_file):
+    """Encodes a local file to base64 for use in HTML/CSS."""
     try:
         with open(bin_file, 'rb') as f:
             return base64.b64encode(f.read()).decode()
@@ -30,20 +35,49 @@ def get_base64(bin_file):
         return None
 
 def inject_css():
+    """Injects CSS for dark theme, film grain, and global glitch effect."""
     st.markdown("""
         <style>
-            .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
+            /* --- BASE STYLES & FILM GRAIN --- */
+            .stApp { 
+                background-color: #080808; 
+                color: #d0d0d0; 
+                font-family: 'Courier New', monospace; 
+            }
             #MainMenu, footer, header {visibility: hidden;}
-            .block-container { justify-content: center; align-items: center; display: flex; flex-direction: column; }
+            .block-container { 
+                justify-content: center; 
+                align-items: center; 
+                display: flex; 
+                flex-direction: column; 
+            }
+            /* Film Grain Effect (Applied to the whole background) */
             .stApp::after {
-                content: " "; position: fixed; inset: 0;
+                content: " "; 
+                position: fixed; 
+                inset: 0;
                 background:
                     linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.25) 50%),
                     linear-gradient(90deg, rgba(255,0,0,0.06), rgba(0,255,0,0.02), rgba(0,0,255,0.06));
                 background-size: 100% 3px, 3px 100%;
-                pointer-events: none; opacity: 0.15; z-index: 999;
+                pointer-events: none; 
+                opacity: 0.15; 
+                z-index: 999;
             }
-            h1 { animation: glitch-text 500ms infinite; }
+            
+            /* --- GLOBAL GLITCH EFFECT --- */
+            /* Target all headings, paragraphs, and Streamlit content containers */
+            h1, h2, h3, h4, p, .stMarkdown, .stText, 
+            .stButton > button, .stTextInput > div > div > input, 
+            .stDataFrame, .stProgress > div > div, 
+            .stTextInput > label, .stMarkdown > div { 
+                /* Apply the animation to almost every visible text element */
+                animation: glitch-text 500ms infinite; 
+                /* Prevent text from collapsing due to glitchy text-shadow */
+                white-space: nowrap; 
+            }
+            
+            /* Keyframe definition for the text shadow glitch */
             @keyframes glitch-text {
                 0%,14% { text-shadow: 0.05em 0 0 #f44, -0.05em -0.025em 0 #2f2, 0.025em 0.05em 0 #34f; }
                 15%,49% { text-shadow: -0.05em -0.025em 0 #f44, 0.025em 0.025em 0 #2f2, -0.05em -0.05em 0 #34f; }
@@ -54,6 +88,7 @@ def inject_css():
     """, unsafe_allow_html=True)
 
 def trigger_static_transition():
+    """Creates a brief static/glitch visual and sound effect."""
     st.markdown('<audio src="https://www.myinstants.com/media/sounds/static-noise.mp3" autoplay style="display:none;"></audio>', unsafe_allow_html=True)
     placeholder = st.empty()
     with placeholder.container():
@@ -66,23 +101,30 @@ def trigger_static_transition():
     placeholder.empty()
 
 def get_new_glitch_box(level=0):
-    """MODIFIED: Generates generally smaller glitch boxes."""
-    # Max size is capped around 150 (down from 250 in the original)
+    """
+    Generates a new, generally smaller random bounding box for a glitch.
+    The size decreases slightly as the level increases.
+    """
+    # Max size is capped around 150 (was 250)
     max_size = max(150 - level * 10, 50) 
     
-    # Min size is capped around 50 (down from 100 in the original)
+    # Min size is capped around 50 (was 100)
     min_size = max(50 - level * 5, 30) 
     
-    min_size = min(min_size, max_size) # Ensure min doesn't exceed max
+    # Ensure min_size doesn't exceed max_size
+    min_size = min(min_size, max_size) 
     
     w = random.randint(min_size, max_size)
     h = random.randint(min_size, max_size)
     
+    # Assuming the original image is 1024x1024 
     x1 = random.randint(50, 1024 - w - 50)
     y1 = random.randint(50, 1024 - h - 50)
+    
     return (x1, y1, x1 + w, y1 + h)
 
 def generate_mutating_frame(base_img, box):
+    """Creates a single corrupted image frame based on the glitch box."""
     frame = base_img.copy()
     x1, y1, x2, y2 = box
     cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
@@ -105,6 +147,7 @@ def generate_mutating_frame(base_img, box):
 
 @st.cache_data(show_spinner=False, persist="disk")
 def generate_scaled_gif(img_path, original_box, target_width, level_idx, glitch_seed):
+    """Generates and caches the pulsating glitch GIF."""
     try:
         random.seed(glitch_seed)
         base_img = Image.open(img_path).convert("RGB")
@@ -128,14 +171,23 @@ def generate_scaled_gif(img_path, original_box, target_width, level_idx, glitch_
     except:
         return None, None
 
+def validate_usn(usn):
+    """Basic validation for a typical USN format (e.g., 1MS22AI000)."""
+    return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
+
+# --- STREAMLIT WIDGET FUNCTIONS ---
+
 inject_css()
 
+# Initialize Session State
 if 'game_state' not in st.session_state:
     st.session_state.update({
         'game_state': 'menu',
         'current_level': 0,
         'start_time': 0.0,
         'player_tag': 'UNK',
+        'player_name': '', 
+        'player_usn': '',  
         'final_time': 0.0,
         'last_move_time': time.time(),
         'glitch_seed': random.randint(1, 100000),
@@ -143,65 +195,121 @@ if 'game_state' not in st.session_state:
         'hits': 0,
     })
 
+# --- GOOGLE SHEETS INTEGRATION ---
 conn = None
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except:
     pass
 
-def save_score(tag, time_val):
+def save_score(tag, name, usn, time_val):
+    """Saves the score, name, and USN to the Google Sheet."""
     if conn:
         try:
-            df = pd.DataFrame([{"Tag": tag, "Time": time_val}])
-            conn.update(worksheet="Scores", data=df)
+            df = pd.DataFrame([{"Tag": tag, "Name": name, "USN": usn, "Time": time_val}])
+            conn.write(worksheet="Scores", data=df, append=True)
             return True
-        except:
+        except Exception as e:
+            # st.error(f"Error saving score: {e}")
             return False
     return False
 
 def get_leaderboard():
+    """Fetches, cleans, and sorts the leaderboard data."""
     if conn:
         try:
-            df = conn.read(worksheet="Scores", ttl=0).dropna(how="all")
-            df['Time'] = pd.to_numeric(df['Time'], errors='coerce').dropna()
-            return df.sort_values('Time').head(10).reset_index(drop=True)
+            df = conn.read(worksheet="Scores", ttl=0).dropna(subset=['Time', 'USN']).copy()
+            df['Time'] = pd.to_numeric(df['Time'], errors='coerce')
+            df.dropna(subset=['Time'], inplace=True)
+            
+            # Select and format columns
+            df = df[['Tag', 'Name', 'USN', 'Time']]
+            df.sort_values(by='Time', ascending=True, inplace=True)
+            df['Rank'] = range(1, len(df) + 1)
+            df['Time'] = df['Time'].apply(lambda x: f"{x:.2f}s")
+            
+            # Reorder columns for display
+            return df[['Rank', 'Name', 'USN', 'Time']].head(10).reset_index(drop=True)
         except:
             pass
-    return pd.DataFrame(columns=["Rank", "Tag", "Time (Offline)"])
+    return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
 
 def move_glitch():
+    """Moves the target glitch to a new location and updates the seed."""
     lvl = st.session_state.current_level
     st.session_state.glitch_seed = random.randint(1, 100000)
     st.session_state.current_box = get_new_glitch_box(level=lvl)
     st.session_state.last_move_time = time.time()
 
+# --- MAIN APP LOGIC ---
+
 st.title("DETROIT: ANOMALY [09]")
 
 if st.session_state.game_state == "menu":
-    tag = st.text_input("OPERATIVE TAG (3 CHARS):", max_chars=3).upper()
-    if st.button(">> START SIMULATION <<", type="primary"):
-        if len(tag) == 3:
-            move_glitch()
-            st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
-            st.rerun()
-    st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
+    
+    st.markdown("### OPERATIVE DATA INPUT")
+    
+    # User Inputs
+    tag = st.text_input(">> AGENT TAG (3 CHARS):", value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '', max_chars=3).upper()
+    name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
+    usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
+    
+    is_valid_usn = validate_usn(usn)
+    
+    start_button = st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag) != 3 or not name or not is_valid_usn))
+    
+    # Input validation messages
+    if len(tag) != 3 and tag:
+        st.warning("Tag must be exactly 3 characters.")
+    if usn and not is_valid_usn:
+        st.warning("Invalid USN format. Please check.")
+        
+    if start_button:
+        move_glitch()
+        st.session_state.update({
+            'game_state': 'playing', 
+            'player_tag': tag, 
+            'player_name': name, 
+            'player_usn': usn,   
+            'start_time': time.time(), 
+            'current_level': 0, 
+            'hits': 0
+        })
+        st.rerun()
+        
+    st.markdown("---")
+    st.markdown("### GLOBAL RANKINGS")
+    leaderboard_df = get_leaderboard()
+    if not leaderboard_df.empty:
+        leaderboard_df.columns = ["Rank", "Name", "USN", "Time"]
+        st.dataframe(leaderboard_df, hide_index=True, use_container_width=True)
+    else:
+        st.info("Leaderboard is empty or connection failed.")
 
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
     
-    # Check against the new, reduced list length
+    # Check if the level index exceeds the reduced number of levels
     if lvl_idx >= len(GLITCHES_PER_LEVEL):
         lvl_idx = len(GLITCHES_PER_LEVEL) - 1
         
     glitches_needed = GLITCHES_PER_LEVEL[lvl_idx]
 
-    elapsed_game_time = time.time() - st.session_state.start_time
-    st.write(f"GAME TIME: {elapsed_game_time:.1f}s | LEVEL: {lvl_idx + 1}/{len(GLITCHES_PER_LEVEL)}")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f"**AGENT: {st.session_state.player_tag}**")
+    with col2:
+        elapsed_game_time = time.time() - st.session_state.start_time
+        st.markdown(f"**TIME: {elapsed_game_time:.1f}s**")
+    with col3:
+        # UPDATED: Display current level based on the reduced list length (5)
+        st.markdown(f"**LEVEL: {lvl_idx + 1}/{len(GLITCHES_PER_LEVEL)}**") 
 
     hits = st.session_state.hits
     progress_frac = hits / glitches_needed if glitches_needed > 0 else 0
-    st.progress(progress_frac, text=f"Glitches: {hits} / {glitches_needed}")
+    st.progress(progress_frac, text=f"Glitches Neutralized: {hits} / {glitches_needed}")
 
+    # The use of LEVEL_FILES[lvl_idx] is safe as long as lvl_idx < len(LEVEL_FILES) (which is 5)
     gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx, st.session_state.glitch_seed)
 
     if gif_path and scaled_box:
@@ -211,14 +319,13 @@ elif st.session_state.game_state == "playing":
             x1, y1, x2, y2 = scaled_box
             cx, cy = coords['x'], coords['y']
 
-            # HIT_TOLERANCE is still 100, but the glitch box is smaller, making it harder.
+            # Check if the click is within the expanded hit tolerance area
             if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
                 trigger_static_transition()
                 st.session_state.hits += 1
                 move_glitch() 
-                
-                # Check against the new, reduced list length
                 if st.session_state.hits >= glitches_needed:
+                    # Check if there are more levels in the reduced list
                     if lvl_idx < len(GLITCHES_PER_LEVEL) - 1:
                         st.session_state.current_level += 1
                         st.session_state.hits = 0
@@ -230,17 +337,36 @@ elif st.session_state.game_state == "playing":
                 st.toast("MISS! RELOCATING...", icon="❌")
                 move_glitch()
                 st.rerun()
+    else:
+        st.error(f"Error loading level file: {LEVEL_FILES[lvl_idx]}")
+
 
 elif st.session_state.game_state == "game_over":
     st.balloons()
-    st.write(f"AGENT: {st.session_state.player_tag} | TIME: {st.session_state.final_time:.2f}s")
-    if st.button("UPLOAD SCORE", type="primary"):
-        if save_score(st.session_state.player_tag, st.session_state.final_time):
-            st.success("DATA UPLOADED.")
-        else:
-            st.error("UPLOAD FAILED.")
-        time.sleep(2)
+    st.markdown("## SIMULATION COMPLETE!")
+    st.write(f"**OPERATIVE:** {st.session_state.player_name}")
+    st.write(f"**USN:** {st.session_state.player_usn}")
+    st.write(f"**FINAL TIME:** {st.session_state.final_time:.2f}s")
+    
+    if st.button(">> UPLOAD SCORE <<", type="primary"):
+        with st.spinner("TRANSMITTING DATA..."):
+            if save_score(st.session_state.player_tag, st.session_state.player_name, st.session_state.player_usn, st.session_state.final_time):
+                st.success("DATA UPLOADED. MISSION SUCCESSFUL.")
+            else:
+                st.error("UPLOAD FAILED. CONNECTION ERROR.")
+        time.sleep(1.5)
         st.session_state.game_state = 'menu'
         st.rerun()
+        
+    st.markdown("---")
     st.markdown("### GLOBAL RANKINGS")
-    st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
+    leaderboard_df = get_leaderboard()
+    if not leaderboard_df.empty:
+        leaderboard_df.columns = ["Rank", "Name", "USN", "Time"]
+        st.dataframe(leaderboard_df, hide_index=True, use_container_width=True)
+    else:
+        st.info("Leaderboard is empty or connection failed.")
+    
+    if st.button("RETURN TO MENU"):
+        st.session_state.game_state = 'menu'
+        st.rerun()
