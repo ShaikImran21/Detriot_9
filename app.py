@@ -10,11 +10,17 @@ st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initia
 
 # --- SETTINGS ---
 GAME_WIDTH = 700
-HIT_TOLERANCE = 60   # A bit wider to be fair with the intense animation
-MOVE_DELAY = 5.0     # Glitch moves every 5 seconds
-NATIVE_SIZE = 1024   # Assumed size of level images
+HIT_TOLERANCE = 60
+MOVE_DELAY = 5.0
+NATIVE_SIZE = 1024
 
-# --- CSS: ADVANCED RETRO EFFECTS ---
+# --- HELPER: ASSET LOADER ---
+def get_base64(bin_file):
+    try:
+        with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
+    except: return None
+
+# --- CSS: RETRO EFFECTS ---
 def inject_css():
     st.markdown("""
     <style>
@@ -45,7 +51,7 @@ def inject_css():
 
 # --- DYNAMIC "HYPER-GLITCH" ANIMATION ---
 def inject_glitch_css(l, t, w, h):
-    # This uses advanced CSS filters to create a violent tearing effect without needing a GIF
+    # NOTE: Double braces {{ }} are used for actual CSS, single braces { } for Python variables.
     st.markdown(f"""
     <style>
         div[data-testid="stImage"] {{ position: relative !important; display: inline-block !important; overflow: hidden !important; }}
@@ -59,12 +65,12 @@ def inject_glitch_css(l, t, w, h):
             animation: hyper-glitch 0.2s infinite linear alternate-reverse;
         }}
         @keyframes hyper-glitch {{
-            0% { backdrop-filter: invert(0) blur(0px); transform: translate(0,0) skew(0deg); }
-            20% { backdrop-filter: invert(0.8) hue-rotate(90deg) blur(2px); transform: translate(-5px, 2px) skew(5deg); }
-            40% { backdrop-filter: invert(0.2) hue-rotate(180deg) contrast(2); transform: translate(5px, -5px) skew(-5deg); }
-            60% { backdrop-filter: sepia(1) hue-rotate(270deg) saturate(5); transform: translate(-5px, 5px) scale(1.1); }
-            80% { backdrop-filter: invert(1) blur(1px); transform: translate(2px, -2px) skew(2deg); }
-            100% { backdrop-filter: invert(0) blur(0px); transform: translate(0,0) skew(0deg); }
+            0% {{ backdrop-filter: invert(0) blur(0px); transform: translate(0,0) skew(0deg); }}
+            20% {{ backdrop-filter: invert(0.8) hue-rotate(90deg) blur(2px); transform: translate(-5px, 2px) skew(5deg); }}
+            40% {{ backdrop-filter: invert(0.2) hue-rotate(180deg) contrast(2); transform: translate(5px, -5px) skew(-5deg); }}
+            60% {{ backdrop-filter: sepia(1) hue-rotate(270deg) saturate(5); transform: translate(-5px, 5px) scale(1.1); }}
+            80% {{ backdrop-filter: invert(1) blur(1px); transform: translate(2px, -2px) skew(2deg); }}
+            100% {{ backdrop-filter: invert(0) blur(0px); transform: translate(0,0) skew(0deg); }}
         }}
     </style>
     """, unsafe_allow_html=True)
@@ -76,7 +82,6 @@ def trigger_static_transition():
     with placeholder.container():
         st.markdown('<div style="position:fixed;top:0;left:0;width:100%;height:100%;background-color:#111;z-index:10000;"></div>', unsafe_allow_html=True)
         time.sleep(0.1)
-        # Use a generic online GIF if local one fails
         g_url = "https://media.giphy.com/media/oEI9uBYSzLpBK/giphy.gif"
         st.markdown(f'<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:url({g_url});background-size:cover;z-index:10001;opacity:0.8;mix-blend-mode:hard-light;"></div>', unsafe_allow_html=True)
         time.sleep(0.4)
@@ -94,8 +99,7 @@ inject_css()
 if 'game_state' not in st.session_state:
     st.session_state.update({
         'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK',
-        'last_move_time': time.time(), 'gx':0, 'gy':0, 'gw':0, 'gh':0,
-        'seed': int(time.time()) # Unique seed for this session
+        'last_move_time': time.time(), 'gx':0, 'gy':0, 'gw':0, 'gh':0
     })
 
 conn = None
@@ -119,7 +123,6 @@ def get_leaderboard():
 
 # --- RANDOMIZER ---
 def move_glitch():
-    # Completely random position every single time it moves
     st.session_state.gw = random.randint(100, 250)
     st.session_state.gh = random.randint(100, 250)
     st.session_state.gx = random.randint(50, NATIVE_SIZE - st.session_state.gw - 50)
@@ -129,7 +132,6 @@ def move_glitch():
 # --- GAME LOOP ---
 st.title("DETROIT: ANOMALY [09]")
 
-# Auto-move check
 if st.session_state.game_state == 'playing':
     if time.time() - st.session_state.last_move_time > MOVE_DELAY:
         move_glitch()
@@ -139,7 +141,6 @@ if st.session_state.game_state == "menu":
     tag = st.text_input("OPERATIVE TAG (3 CHARS):", max_chars=3).upper()
     if st.button(">> START SIMULATION <<", type="primary"):
         if len(tag) == 3:
-            # Reseed random generator for a totally new playthrough
             random.seed(time.time())
             move_glitch()
             st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 'current_level': 0})
@@ -149,23 +150,20 @@ if st.session_state.game_state == "menu":
 
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
-    
     elapsed = time.time() - st.session_state.last_move_time
     time_left = max(0.0, MOVE_DELAY - elapsed)
     st.progress(time_left / MOVE_DELAY, text=f"SECTOR 0{lvl_idx + 1} // SHIFT IN {time_left:.1f}s")
 
-    # Inject the Hyper-Glitch at current random coordinates
+    # Inject Glitch
     l_pct = (st.session_state.gx / NATIVE_SIZE) * 100
     t_pct = (st.session_state.gy / NATIVE_SIZE) * 100
     w_pct = (st.session_state.gw / NATIVE_SIZE) * 100
     h_pct = (st.session_state.gh / NATIVE_SIZE) * 100
     inject_glitch_css(l_pct, t_pct, w_pct, h_pct)
 
-    # Render image. Key changes on move to reset click state.
     coords = streamlit_image_coordinates(LEVEL_FILES[lvl_idx], key=f"lvl_{lvl_idx}_{st.session_state.last_move_time}", width=GAME_WIDTH)
 
     if coords:
-        # Double check we didn't expire while clicking
         if time.time() - st.session_state.last_move_time > MOVE_DELAY:
              st.toast("TOO SLOW! TARGET SHIFTED.", icon="⚠️")
              move_glitch()
@@ -179,7 +177,6 @@ elif st.session_state.game_state == "playing":
 
             if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and \
                (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
-                # HIT!
                 trigger_static_transition()
                 if lvl_idx < 8:
                     st.session_state.current_level += 1
@@ -190,24 +187,19 @@ elif st.session_state.game_state == "playing":
                     st.session_state.game_state = 'game_over'
                     st.rerun()
             else:
-                 # MISS!
                  st.toast("MISS! RELOCATING...", icon="❌")
                  move_glitch()
                  time.sleep(0.5)
                  st.rerun()
                  
-    # Smart refresh loop to keep timer active without seizure-inducing flickering
-    if time_left < 1.5: time.sleep(0.2); st.rerun()
-    else: time.sleep(1.0); st.rerun()
+    time.sleep(0.5)
+    st.rerun()
 
 elif st.session_state.game_state == "game_over":
     st.balloons()
-    st.write(f"AGENT: {st.session_state.player_tag} | TIME: {st.session_state.final_time:.2f}s")
-    if st.button("UPLOAD SCORE", type="primary"):
-        if save_score(st.session_state.player_tag, st.session_state.final_time):
-            st.success("DATA UPLOADED.")
-        else:
-            st.error("UPLOAD FAILED.")
+    st.write(f"TIME: {st.session_state.final_time:.2f}s")
+    if st.button("UPLOAD SCORE"):
+        save_score(st.session_state.player_tag, st.session_state.final_time)
+        st.success("DONE")
         time.sleep(2); st.session_state.game_state = 'menu'; st.rerun()
-    st.markdown("### GLOBAL RANKINGS")
     st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
