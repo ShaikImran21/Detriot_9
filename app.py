@@ -13,8 +13,8 @@ st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initia
 # --- SETTINGS ---
 GAME_WIDTH = 700
 HIT_TOLERANCE = 40 
-MOVE_DELAY = 4 # Glitch teleports every 4 seconds
-ORIGINAL_IMG_SIZE = 1024 # Assumed size of source images
+MOVE_DELAY = 4.0 # Glitch moves every 4s
+ORIGINAL_IMG_SIZE = 1024
 
 # --- HELPER: ASSET LOADER ---
 def get_base64(bin_file):
@@ -61,10 +61,10 @@ def trigger_static_transition():
         time.sleep(0.4)
     placeholder.empty()
 
-# --- RANDOM LOCATION GENERATOR ---
+# --- RANDOM GENERATORS ---
 def get_new_glitch_box():
-    w = random.randint(80, 150)
-    h = random.randint(80, 150)
+    w = random.randint(80, 250)
+    h = random.randint(80, 250)
     x1 = random.randint(50, ORIGINAL_IMG_SIZE - w - 50)
     y1 = random.randint(50, ORIGINAL_IMG_SIZE - h - 50)
     return (x1, y1, x1 + w, y1 + h)
@@ -76,10 +76,10 @@ def generate_mutating_frame(base_img, box):
     cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
     
     for _ in range(random.randint(4, 9)):
-        w_shard = random.randint(30, 200)
-        h_shard = random.randint(20, 150)
-        sx = max(0, min(cx - w_shard // 2 + random.randint(-60, 60), base_img.width - w_shard))
-        sy = max(0, min(cy - h_shard // 2 + random.randint(-60, 60), base_img.height - h_shard))
+        w_shard = random.randint(int((x2-x1)*0.4), int((x2-x1)*1.2))
+        h_shard = random.randint(int((y2-y1)*0.4), int((y2-y1)*1.2))
+        sx = max(0, min(cx - w_shard // 2 + random.randint(-40, 40), base_img.width - w_shard))
+        sy = max(0, min(cy - h_shard // 2 + random.randint(-40, 40), base_img.height - h_shard))
         shard_box = (sx, sy, sx + w_shard, sy + h_shard)
         try:
             shard = frame.crop(shard_box).convert("RGB")
@@ -91,6 +91,7 @@ def generate_mutating_frame(base_img, box):
 
 @st.cache_data(show_spinner=False, persist="disk")
 def generate_scaled_gif(img_path, original_box, target_width, level_idx, glitch_seed):
+    # glitch_seed ensures a new GIF is made every time it moves
     try:
         random.seed(glitch_seed)
         base_img = Image.open(img_path).convert("RGB")
@@ -102,11 +103,14 @@ def generate_scaled_gif(img_path, original_box, target_width, level_idx, glitch_
         scaled_box = (int(x1 * scale_factor), int(y1 * scale_factor), int(x2 * scale_factor), int(y2 * scale_factor))
 
         frames = []
-        for _ in range(8): frames.append(base_img.copy())
-        for _ in range(6): frames.append(generate_mutating_frame(base_img, scaled_box))
+        # 15 frames normal (approx 3s wait)
+        for _ in range(15): frames.append(base_img.copy())
+        # 8 frames chaotic mutation (approx 0.8s visible)
+        for _ in range(8): frames.append(generate_mutating_frame(base_img, scaled_box))
             
         temp_file = f"lvl_{level_idx}_{glitch_seed}.gif"
-        frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*8 + [80]*6, loop=0)
+        # 200ms normal, 70ms chaos
+        frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15 + [70]*8, loop=0)
         return temp_file, scaled_box
     except: return None, None
 
@@ -122,7 +126,8 @@ inject_css()
 if 'game_state' not in st.session_state:
     st.session_state.update({
         'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'final_time': 0.0,
-        'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000),
+        'last_move_time': time.time(), 
+        'glitch_seed': random.randint(1, 100000),
         'current_box': get_new_glitch_box()
     })
 
@@ -148,9 +153,10 @@ def get_leaderboard():
 # --- GAME LOOP ---
 st.title("DETROIT: ANOMALY [09]")
 
-# AUTO-TELEPORT LOGIC
+# AUTO-TELEPORT LOGIC (Runs only on interaction to avoid constant reload)
 if st.session_state.game_state == 'playing':
     if time.time() - st.session_state.last_move_time > MOVE_DELAY:
+        # Time is up! Move the glitch.
         st.session_state.glitch_seed = random.randint(1, 100000)
         st.session_state.current_box = get_new_glitch_box()
         st.session_state.last_move_time = time.time()
@@ -160,28 +166,50 @@ if st.session_state.game_state == "menu":
     tag = st.text_input("OPERATIVE TAG (3 CHARS):", max_chars=3).upper()
     if st.button(">> START SIMULATION <<", type="primary"):
         if len(tag) == 3:
-            st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 'current_level': 0, 'last_move_time': time.time(), 'current_box': get_new_glitch_box()})
+            st.session_state.update({
+                'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 
+                'current_level': 0, 'last_move_time': time.time(), 
+                'current_box': get_new_glitch_box(), 'glitch_seed': random.randint(1, 100000)
+            })
             st.rerun()
     st.markdown("### TOP AGENTS")
     st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
 
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
-    # Progress bar for teleport timer
+    
+    # Progress bar for teleport timer (updates only on interaction to be stable)
     time_left = max(0, MOVE_DELAY - (time.time() - st.session_state.last_move_time))
     st.progress(time_left / MOVE_DELAY, text=f"SECTOR 0{lvl_idx + 1} // SHIFT IN {time_left:.1f}s")
 
     gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx, st.session_state.glitch_seed)
 
     if gif_path and scaled_box:
+        # Key must include seed so component reloads when glitch moves
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
+        
         if coords:
+            # Player clicked! Now we check everything.
             x1, y1, x2, y2 = scaled_box
-            if (x1 - HIT_TOLERANCE) <= coords['x'] <= (x2 + HIT_TOLERANCE) and \
-               (y1 - HIT_TOLERANCE) <= coords['y'] <= (y2 + HIT_TOLERANCE):
+            
+            # Did they click in time?
+            time_since_move = time.time() - st.session_state.last_move_time
+            if time_since_move > MOVE_DELAY:
+                 # Too slow! It moved just before they clicked.
+                 st.toast("TOO SLOW. ANOMALY SHIFTED.", icon="⚠️")
+                 st.session_state.glitch_seed = random.randint(1, 100000)
+                 st.session_state.current_box = get_new_glitch_box()
+                 st.session_state.last_move_time = time.time()
+                 time.sleep(0.5)
+                 st.rerun()
+            # Did they click the right spot?
+            elif (x1 - HIT_TOLERANCE) <= coords['x'] <= (x2 + HIT_TOLERANCE) and \
+                 (y1 - HIT_TOLERANCE) <= coords['y'] <= (y2 + HIT_TOLERANCE):
                 trigger_static_transition()
                 if lvl_idx < 8: 
                     st.session_state.current_level += 1
+                    st.session_state.glitch_seed = random.randint(1, 100000)
+                    st.session_state.current_box = get_new_glitch_box()
                     st.session_state.last_move_time = time.time()
                     st.rerun()
                 else: 
@@ -189,16 +217,15 @@ elif st.session_state.game_state == "playing":
                     st.session_state.game_state = 'game_over'
                     st.rerun()
             else:
-                 # Missed click -> Force immediate teleport
+                 # Missed! Relocate immediately as penalty.
+                 st.toast("MISS! SEQUENCE RESET.", icon="❌")
                  st.session_state.glitch_seed = random.randint(1, 100000)
                  st.session_state.current_box = get_new_glitch_box()
                  st.session_state.last_move_time = time.time()
+                 time.sleep(0.5)
                  st.rerun()
     else:
-        st.error("ASSET ERROR: Ensure 'assets/levelX.png' exist.")
-
-    time.sleep(0.1)
-    st.rerun()
+        st.error("ASSET ERROR: Check 'assets/' folder for level images.")
 
 elif st.session_state.game_state == "game_over":
     st.balloons()
