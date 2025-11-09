@@ -8,6 +8,7 @@ from PIL import Image, ImageOps, ImageEnhance
 from streamlit_gsheets import GSheetsConnection
 from streamlit_image_coordinates import streamlit_image_coordinates
 
+
 st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 700
@@ -20,7 +21,7 @@ LEVEL_FILES = [
     "assets/level7.png", "assets/level8.png", "assets/level9.png"
 ]
 
-GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10]  # Club promo low glitch count per level
+GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10]  # Safe length 9, matching 9 levels
 
 def get_base64(bin_file):
     try:
@@ -184,10 +185,13 @@ if st.session_state.game_state == "menu":
 
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
+    # Safety fallback for indexing glitch counts
+    if lvl_idx >= len(GLITCHES_PER_LEVEL):
+        lvl_idx = len(GLITCHES_PER_LEVEL) - 1
+    glitches_needed = GLITCHES_PER_LEVEL[lvl_idx]
+
     time_left = max(0.0, MOVE_DELAY - (time.time() - st.session_state.last_move_time))
     st.progress(time_left / MOVE_DELAY, text=f"SECTOR 0{lvl_idx + 1} // SHIFT IN {time_left:.1f}s")
-
-    glitches_needed = GLITCHES_PER_LEVEL[lvl_idx]
 
     gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx, st.session_state.glitch_seed)
 
