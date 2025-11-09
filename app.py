@@ -8,7 +8,6 @@ from PIL import Image, ImageOps, ImageEnhance
 from streamlit_gsheets import GSheetsConnection
 from streamlit_image_coordinates import streamlit_image_coordinates
 
-
 st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 700
@@ -21,7 +20,7 @@ LEVEL_FILES = [
     "assets/level7.png", "assets/level8.png", "assets/level9.png"
 ]
 
-GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10]  # Safe length 9, matching 9 levels
+GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10]  # Club promo low glitch count per level
 
 def get_base64(bin_file):
     try:
@@ -68,9 +67,11 @@ def trigger_static_transition():
         time.sleep(0.4)
     placeholder.empty()
 
-def get_new_glitch_box():
-    w = random.randint(100, 250)
-    h = random.randint(100, 250)
+def get_new_glitch_box(level=0):
+    max_size = max(250 - level * 20, 50)
+    min_size = max(100 - level * 10, 30)
+    w = random.randint(min_size, max_size)
+    h = random.randint(min_size, max_size)
     x1 = random.randint(50, 1024 - w - 50)
     y1 = random.randint(50, 1024 - h - 50)
     return (x1, y1, x1 + w, y1 + h)
@@ -163,8 +164,9 @@ def get_leaderboard():
     return pd.DataFrame(columns=["Rank", "Tag", "Time (Offline)"])
 
 def move_glitch():
+    lvl = st.session_state.current_level
     st.session_state.glitch_seed = random.randint(1, 100000)
-    st.session_state.current_box = get_new_glitch_box()
+    st.session_state.current_box = get_new_glitch_box(level=lvl)
     st.session_state.last_move_time = time.time()
 
 st.title("DETROIT: ANOMALY [09]")
@@ -185,7 +187,6 @@ if st.session_state.game_state == "menu":
 
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
-    # Safety fallback for indexing glitch counts
     if lvl_idx >= len(GLITCHES_PER_LEVEL):
         lvl_idx = len(GLITCHES_PER_LEVEL) - 1
     glitches_needed = GLITCHES_PER_LEVEL[lvl_idx]
@@ -210,11 +211,11 @@ elif st.session_state.game_state == "playing":
                 if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
                     trigger_static_transition()
                     st.session_state.hits += 1
+                    move_glitch()  # Change glitch box and reduce size immediately after hit
                     if st.session_state.hits >= glitches_needed:
                         if lvl_idx < 8:
                             st.session_state.current_level += 1
                             st.session_state.hits = 0
-                            move_glitch()
                             st.rerun()
                         else:
                             st.session_state.final_time = time.time() - st.session_state.start_time
