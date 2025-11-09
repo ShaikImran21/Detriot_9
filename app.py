@@ -12,7 +12,6 @@ st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initia
 
 GAME_WIDTH = 700
 HIT_TOLERANCE = 100
-MOVE_DELAY = 15.0
 
 LEVEL_FILES = [
     "assets/level1.png", "assets/level2.png", "assets/level3.png",
@@ -171,17 +170,12 @@ def move_glitch():
 
 st.title("DETROIT: ANOMALY [09]")
 
-if st.session_state.game_state == 'playing':
-    if time.time() - st.session_state.last_move_time > MOVE_DELAY:
-        move_glitch()
-        st.rerun()
-
 if st.session_state.game_state == "menu":
     tag = st.text_input("OPERATIVE TAG (3 CHARS):", max_chars=3).upper()
     if st.button(">> START SIMULATION <<", type="primary"):
         if len(tag) == 3:
             move_glitch()
-            st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 'current_level': 0, 'hits':0})
+            st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
             st.rerun()
     st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
 
@@ -191,8 +185,12 @@ elif st.session_state.game_state == "playing":
         lvl_idx = len(GLITCHES_PER_LEVEL) - 1
     glitches_needed = GLITCHES_PER_LEVEL[lvl_idx]
 
-    time_left = max(0.0, MOVE_DELAY - (time.time() - st.session_state.last_move_time))
-    st.progress(time_left / MOVE_DELAY, text=f"SECTOR 0{lvl_idx + 1} // SHIFT IN {time_left:.1f}s")
+    elapsed_game_time = time.time() - st.session_state.start_time
+    st.write(f"GAME TIME: {elapsed_game_time:.1f}s")
+
+    hits = st.session_state.hits
+    progress_frac = hits / glitches_needed if glitches_needed > 0 else 0
+    st.progress(progress_frac, text=f"Glitches: {hits} / {glitches_needed}")
 
     gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx, st.session_state.glitch_seed)
 
@@ -200,33 +198,26 @@ elif st.session_state.game_state == "playing":
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
 
         if coords:
-            if time.time() - st.session_state.last_move_time > MOVE_DELAY:
-                st.toast("TOO SLOW! TARGET SHIFTED.", icon="⚠")
+            x1, y1, x2, y2 = scaled_box
+            cx, cy = coords['x'], coords['y']
+
+            if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
+                trigger_static_transition()
+                st.session_state.hits += 1
+                move_glitch()  # Change glitch box and reduce size immediately after hit
+                if st.session_state.hits >= glitches_needed:
+                    if lvl_idx < 8:
+                        st.session_state.current_level += 1
+                        st.session_state.hits = 0
+                        st.rerun()
+                    else:
+                        st.session_state.final_time = time.time() - st.session_state.start_time
+                        st.session_state.game_state = 'game_over'
+                        st.rerun()
+            else:
+                st.toast("MISS! RELOCATING...", icon="❌")
                 move_glitch()
                 st.rerun()
-            else:
-                x1, y1, x2, y2 = scaled_box
-                cx, cy = coords['x'], coords['y']
-
-                if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
-                    trigger_static_transition()
-                    st.session_state.hits += 1
-                    move_glitch()  # Change glitch box and reduce size immediately after hit
-                    if st.session_state.hits >= glitches_needed:
-                        if lvl_idx < 8:
-                            st.session_state.current_level += 1
-                            st.session_state.hits = 0
-                            st.rerun()
-                        else:
-                            st.session_state.final_time = time.time() - st.session_state.start_time
-                            st.session_state.game_state = 'game_over'
-                            st.rerun()
-                else:
-                    st.toast("MISS! RELOCATING...", icon="❌")
-                    move_glitch()
-                    st.rerun()
-
-    time.sleep(0.5)
 
 elif st.session_state.game_state == "game_over":
     st.balloons()
