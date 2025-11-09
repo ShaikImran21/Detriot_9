@@ -67,9 +67,8 @@ def trigger_static_transition():
     placeholder.empty()
 
 def get_new_glitch_box(level=0):
-    # Bigger range for size randomized per reload
-    max_size = max(350 - level * 30, 80)
-    min_size = max(120 - level * 15, 50)
+    min_size = 80
+    max_size = 300
     w = random.randint(min_size, max_size)
     h = random.randint(min_size, max_size)
     x1 = random.randint(50, 1024 - w - 50)
@@ -178,7 +177,8 @@ if st.session_state.game_state == "menu":
     if st.button(">> START SIMULATION <<", type="primary"):
         if len(tag) == 3:
             move_glitch()
-            st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 'current_level': 0, 'hits': 0, 'glitch_active': True})
+            st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(),
+                                     'current_level': 0, 'hits': 0, 'glitch_active': True})
             st.rerun()
     st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
 
@@ -195,7 +195,8 @@ elif st.session_state.game_state == "playing":
     progress_frac = hits / glitches_needed if glitches_needed > 0 else 0
     st.progress(progress_frac, text=f"Glitches: {hits} / {glitches_needed}")
 
-    gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx, st.session_state.glitch_seed)
+    gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx,
+                                               st.session_state.glitch_seed)
 
     if gif_path and scaled_box:
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
@@ -226,7 +227,7 @@ elif st.session_state.game_state == "playing":
                         st.session_state.game_state = 'game_over'
                 st.rerun()
             else:
-                move_glitch()
+                # Do not move glitch or reload level on miss, just rerun to accept clicks again
                 st.rerun()
 
 elif st.session_state.game_state == "game_over":
