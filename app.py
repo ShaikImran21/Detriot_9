@@ -14,7 +14,7 @@ st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initia
 
 GAME_WIDTH = 700
 # MODIFIED: Reduced hit tolerance for higher difficulty
-HIT_TOLERANCE = 50 
+HIT_TOLERANCE = 100 
 # NEW: Timeout constant
 GLITCH_TIMEOUT = 5.0 
 
