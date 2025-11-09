@@ -14,6 +14,23 @@ st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initia
 GAME_WIDTH = 700
 HIT_TOLERANCE = 80
 
+# --- CONNECTION DOCTOR (DEBUGGER) ---
+# This will appear at the top of your app to tell you if it's working.
+# Once it works, you can delete this section.
+with st.expander("🔌 CONNECTION STATUS (Click to view)", expanded=True):
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        st.success("✅ SECRETS FOUND: Streamlit can see your credentials.")
+        try:
+            test_df = conn.read(worksheet="Scores", ttl=0)
+            st.success("✅ READ PERMISSION: Can read the 'Scores' tab.")
+            st.info(f"Current Leaderboard Entries: {len(test_df)}")
+        except Exception as e:
+            st.error(f"❌ READ FAILED: Could not read 'Scores' tab. Did you rename 'Sheet1' to 'Scores'?")
+            st.error(f"Error details: {e}")
+    except Exception as e:
+        st.error("❌ SECRETS MISSING: details not found in .streamlit/secrets.toml")
+
 # --- HELPER: ASSET LOADER ---
 def get_base64(bin_file):
     try:
@@ -111,27 +128,21 @@ inject_css()
 if 'game_state' not in st.session_state:
     st.session_state.update({'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'final_time': 0.0})
 
-# FAILSAFE CONNECTION ATTEMPT
-conn = None
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-except:
-    pass # Allow app to load even if connection fails
-
+# --- LEADERBOARD FUNCTIONS ---
 def save_score(tag, time_val):
-    if conn:
-        try: conn.update(worksheet="Scores", data=pd.DataFrame([{"Tag": tag, "Time": time_val}])); return True
-        except: return False
-    return False
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        conn.update(worksheet="Scores", data=pd.DataFrame([{"Tag": tag, "Time": time_val}]))
+        return True
+    except: return False
 
 def get_leaderboard():
-    if conn:
-        try:
-            df = conn.read(worksheet="Scores", ttl=0).dropna(how="all")
-            df['Time'] = pd.to_numeric(df['Time'], errors='coerce').dropna()
-            return df.sort_values('Time').head(10).reset_index(drop=True)
-        except: pass
-    return pd.DataFrame(columns=["Rank", "Tag", "Time (Offline)"])
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(worksheet="Scores", ttl=0).dropna(how="all")
+        df['Time'] = pd.to_numeric(df['Time'], errors='coerce').dropna()
+        return df.sort_values('Time').head(10).reset_index(drop=True)
+    except: return pd.DataFrame(columns=["Rank", "Tag", "Time (Offline)"])
 
 # --- GAME LOOP ---
 st.title("DETROIT: ANOMALY [09]")
@@ -174,7 +185,7 @@ elif st.session_state.game_state == "game_over":
         if save_score(st.session_state.player_tag, st.session_state.final_time):
             st.success("DATA UPLOADED.")
         else:
-            st.error("CONNECTION FAILED. CHECK SECRETS.")
+            st.error("UPLOAD FAILED. CHECK PERMISSIONS.")
         time.sleep(2); st.session_state.game_state = 'menu'; st.rerun()
     st.markdown("### GLOBAL RANKINGS")
     st.dataframe(get_leaderboard(), hide_index=True)
