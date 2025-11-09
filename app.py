@@ -189,8 +189,7 @@ if st.session_state.game_state == "menu":
             st.session_state.player_name = name.strip()
             st.session_state.player_usn = usn.strip()
             move_glitch()
-            st.session_state.update({'game_state': 'playing', 'start_time': time.time(), 'current_level': 0,
-                                    'hits': 0, 'glitch_active': True})
+            st.session_state.update({'game_state': 'playing', 'start_time': time.time(), 'current_level': 0, 'hits': 0, 'glitch_active': True})
             st.rerun()
         else:
             st.warning("Please enter both Name and USN")
@@ -201,7 +200,6 @@ if st.session_state.game_state == "menu":
         st.dataframe(leaderboard_df, use_container_width=True)
     else:
         st.markdown('<div class="glitch-text">No scores yet.</div>', unsafe_allow_html=True)
-
 
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
@@ -246,25 +244,25 @@ elif st.session_state.game_state == "playing":
                         st.session_state.hits = 0
                     else:
                         st.session_state.final_time = time.time() - st.session_state.start_time
-                        st.session_state.game_state = "game_over"
+                        st.session_state.game_game = "game_over"
                 st.rerun()
             else:
                 st.toast("MISS! RELOCATING...", icon="❌")
                 move_glitch()
                 st.rerun()
 
-
-elif st.session_state.game_state == "game_over":
+elif st.session_state.game_game == 'game_over':
     st.balloons()
     st.markdown('<div class="glitch-text">SAVE YOUR TIME</div>', unsafe_allow_html=True)
-    save_display_name = st.text_input("NAME FOR SCOREBOARD:", max_chars=20, value=st.session_state.player_name)
+    save_time = st.text_input("NAME FOR SCOREBOARD:", max_chars=20, value=st.session_state.player_name)
     if st.button("SAVE SCORE"):
-        if save_score(save_display_name, st.session_state.player_usn, st.session_state.final_time):
+        if save_score(save_time, st.session_state.player_usn, st.session_state.final_time):
             st.success("SCORE SAVED!")
             st.session_state.game_state = "menu"
             st.rerun()
         else:
             st.error("FAILED TO SAVE SCORE.")
+
     leaderboard_df = get_leaderboard()
     if not leaderboard_df.empty:
         st.markdown('<div class="glitch-text">GLOBAL LEADERBOARD</div>', unsafe_allow_html=True)
