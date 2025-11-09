@@ -2,6 +2,7 @@ import streamlit as st
 import time
 import pandas as pd
 import random
+import os
 import base64
 from PIL import Image, ImageOps, ImageEnhance
 from streamlit_gsheets import GSheetsConnection
@@ -18,7 +19,7 @@ LEVEL_FILES = [
     "assets/level7.png", "assets/level8.png", "assets/level9.png"
 ]
 
-GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10]
+GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10]  # Low glitch count per level for club promo
 
 def get_base64(bin_file):
     try:
@@ -29,31 +30,26 @@ def get_base64(bin_file):
 
 def inject_css():
     st.markdown("""
-    <style>
-        .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
-        #MainMenu, footer, header {visibility: hidden;}
-        .block-container { justify-content: center; align-items: center; display: flex; flex-direction: column; }
-        .glitch-text, h1, label {
-            animation: glitch-text 500ms infinite;
-            font-family: 'Courier New', monospace;
-            color: #d0d0d0;
-            font-weight: bold;
-        }
-        .stApp::after {
-            content: " "; position: fixed; inset: 0;
-            background:
-                linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.25) 50%),
-                linear-gradient(90deg, rgba(255,0,0,0.06), rgba(0,255,0,0.02), rgba(0,0,255,0.06));
-            background-size: 100% 3px, 3px 100%;
-            pointer-events: none; opacity: 0.15; z-index: 999;
-        }
-        @keyframes glitch-text {
-            0%,14% { text-shadow: 0.05em 0 0 #f44, -0.05em -0.025em 0 #2f2, 0.025em 0.05em 0 #34f; }
-            15%,49% { text-shadow: -0.05em -0.025em 0 #f44, 0.025em 0.025em 0 #2f2, -0.05em -0.05em 0 #34f; }
-            50%,99% { text-shadow: 0.025em 0.05em 0 #f44, 0.05em 0 0 #2f2, 0 -0.05em 0 #34f; }
-            100% { text-shadow: -0.025em 0 0 #f44, -0.025em -0.025em 0 #2f2, -0.025em -0.05em 0 #34f; }
-        }
-    </style>
+        <style>
+            .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
+            #MainMenu, footer, header {visibility: hidden;}
+            .block-container { justify-content: center; align-items: center; display: flex; flex-direction: column; }
+            .stApp::after {
+                content: " "; position: fixed; inset: 0;
+                background:
+                    linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.25) 50%),
+                    linear-gradient(90deg, rgba(255,0,0,0.06), rgba(0,255,0,0.02), rgba(0,0,255,0.06));
+                background-size: 100% 3px, 3px 100%;
+                pointer-events: none; opacity: 0.15; z-index: 999;
+            }
+            h1 { animation: glitch-text 500ms infinite; }
+            @keyframes glitch-text {
+                0%,14% { text-shadow: 0.05em 0 0 #f44, -0.05em -0.025em 0 #2f2, 0.025em 0.05em 0 #34f; }
+                15%,49% { text-shadow: -0.05em -0.025em 0 #f44, 0.025em 0.025em 0 #2f2, -0.05em -0.05em 0 #34f; }
+                50%,99% { text-shadow: 0.025em 0.05em 0 #f44, 0.05em 0 0 #2f2, 0 -0.05em 0 #34f; }
+                100% { text-shadow: -0.025em 0 0 #f44, -0.025em -0.025em 0 #2f2, -0.025em -0.05em 0 #34f; }
+            }
+        </style>
     """, unsafe_allow_html=True)
 
 def trigger_static_transition():
@@ -132,14 +128,12 @@ if 'game_state' not in st.session_state:
         'game_state': 'menu',
         'current_level': 0,
         'start_time': 0.0,
-        'player_name': '',
-        'player_usn': '',
+        'player_tag': 'UNK',
         'final_time': 0.0,
         'last_move_time': time.time(),
         'glitch_seed': random.randint(1, 100000),
         'current_box': get_new_glitch_box(),
         'hits': 0,
-        'glitch_active': True,
     })
 
 conn = None
@@ -148,10 +142,10 @@ try:
 except:
     pass
 
-def save_score(name, usn, time_val):
+def save_score(tag, time_val):
     if conn:
         try:
-            df = pd.DataFrame([{"Name": name, "USN": usn, "Time": time_val}])
+            df = pd.DataFrame([{"Tag": tag, "Time": time_val}])
             conn.update(worksheet="Scores", data=df)
             return True
         except:
@@ -163,43 +157,27 @@ def get_leaderboard():
         try:
             df = conn.read(worksheet="Scores", ttl=0).dropna(how="all")
             df['Time'] = pd.to_numeric(df['Time'], errors='coerce').dropna()
-            df = df.sort_values('Time').reset_index(drop=True)
-            df["Rank"] = df.index + 1
-            return df[["Rank", "Name", "USN", "Time"]]
+            return df.sort_values('Time').head(10).reset_index(drop=True)
         except:
             pass
-    return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
+    return pd.DataFrame(columns=["Rank", "Tag", "Time (Offline)"])
 
 def move_glitch():
     lvl = st.session_state.current_level
     st.session_state.glitch_seed = random.randint(1, 100000)
     st.session_state.current_box = get_new_glitch_box(level=lvl)
-    st.session_state.glitch_active = True
     st.session_state.last_move_time = time.time()
 
-st.markdown('<h1 class="glitch-text">DETROIT: ANOMALY [09]</h1>', unsafe_allow_html=True)
+st.title("DETROIT: ANOMALY [09]")
 
 if st.session_state.game_state == "menu":
-    st.markdown('<div class="glitch-text">ENTER YOUR NAME</div>', unsafe_allow_html=True)
-    name = st.text_input("NAME:", max_chars=20, value=st.session_state.player_name)
-    st.markdown('<div class="glitch-text">ENTER YOUR USN</div>', unsafe_allow_html=True)
-    usn = st.text_input("USN:", max_chars=10, value=st.session_state.player_usn)
+    tag = st.text_input("OPERATIVE TAG (3 CHARS):", max_chars=3).upper()
     if st.button(">> START SIMULATION <<", type="primary"):
-        if len(name.strip()) > 0 and len(usn.strip()) > 0:
-            st.session_state.player_name = name.strip()
-            st.session_state.player_usn = usn.strip()
+        if len(tag) == 3:
             move_glitch()
-            st.session_state.update({'game_state': 'playing', 'start_time': time.time(), 'current_level': 0, 'hits': 0, 'glitch_active': True})
+            st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
             st.rerun()
-        else:
-            st.warning("Please enter both Name and USN")
-
-    leaderboard_df = get_leaderboard()
-    if not leaderboard_df.empty:
-        st.markdown('<div class="glitch-text">GLOBAL LEADERBOARD</div>', unsafe_allow_html=True)
-        st.dataframe(leaderboard_df, use_container_width=True)
-    else:
-        st.markdown('<div class="glitch-text">No scores yet.</div>', unsafe_allow_html=True)
+    st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
 
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
@@ -214,58 +192,42 @@ elif st.session_state.game_state == "playing":
     progress_frac = hits / glitches_needed if glitches_needed > 0 else 0
     st.progress(progress_frac, text=f"Glitches: {hits} / {glitches_needed}")
 
-    gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH,
-                                               lvl_idx, st.session_state.glitch_seed)
+    gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx, st.session_state.glitch_seed)
 
     if gif_path and scaled_box:
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
 
-        if coords and st.session_state.glitch_active:
+        if coords:
             x1, y1, x2, y2 = scaled_box
             cx, cy = coords['x'], coords['y']
 
-            cx_center = (x1 + x2) / 2
-            cy_center = (y1 + y2) / 2
-            radius = min(x2 - x1, y2 - y1) / 3
-
-            dx = cx - cx_center
-            dy = cy - cy_center
-            distance_squared = dx * dx + dy * dy
-
-            if distance_squared <= radius * radius:
-                st.session_state.glitch_active = False
+            if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
                 trigger_static_transition()
                 st.session_state.hits += 1
-                move_glitch()
-
+                move_glitch()  # Change glitch box and reduce size immediately after hit
                 if st.session_state.hits >= glitches_needed:
                     if lvl_idx < len(GLITCHES_PER_LEVEL) - 1:
                         st.session_state.current_level += 1
                         st.session_state.hits = 0
                     else:
                         st.session_state.final_time = time.time() - st.session_state.start_time
-                        st.session_state.game_game = "game_over"
+                        st.session_state.game_state = 'game_over'
                 st.rerun()
             else:
                 st.toast("MISS! RELOCATING...", icon="❌")
                 move_glitch()
                 st.rerun()
 
-elif st.session_state.game_game == 'game_over':
+elif st.session_state.game_state == "game_over":
     st.balloons()
-    st.markdown('<div class="glitch-text">SAVE YOUR TIME</div>', unsafe_allow_html=True)
-    save_time = st.text_input("NAME FOR SCOREBOARD:", max_chars=20, value=st.session_state.player_name)
-    if st.button("SAVE SCORE"):
-        if save_score(save_time, st.session_state.player_usn, st.session_state.final_time):
-            st.success("SCORE SAVED!")
-            st.session_state.game_state = "menu"
-            st.rerun()
+    st.write(f"AGENT: {st.session_state.player_tag} | TIME: {st.session_state.final_time:.2f}s")
+    if st.button("UPLOAD SCORE", type="primary"):
+        if save_score(st.session_state.player_tag, st.session_state.final_time):
+            st.success("DATA UPLOADED.")
         else:
-            st.error("FAILED TO SAVE SCORE.")
-
-    leaderboard_df = get_leaderboard()
-    if not leaderboard_df.empty:
-        st.markdown('<div class="glitch-text">GLOBAL LEADERBOARD</div>', unsafe_allow_html=True)
-        st.dataframe(leaderboard_df, use_container_width=True)
-    else:
-        st.markdown('<div class="glitch-text">No scores yet.</div>', unsafe_allow_html=True)
+            st.error("UPLOAD FAILED.")
+        time.sleep(2)
+        st.session_state.game_state = 'menu'
+        st.rerun()
+    st.markdown("### GLOBAL RANKINGS")
+    st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
