@@ -106,10 +106,10 @@ def get_new_glitch_box(level=0):
     The size decreases slightly as the level increases.
     """
     # New Max size is capped around 150 (was 250)
-    max_size = max(150 - level * 10, 50) 
+    max_size = max(75 - level * 10, 50) 
     
     # New Min size is capped around 50 (was 100)
-    min_size = max(50 - level * 5, 30) 
+    min_size = max(25 - level * 5, 30) 
     
     # Ensure min_size doesn't exceed max_size
     min_size = min(min_size, max_size) 
