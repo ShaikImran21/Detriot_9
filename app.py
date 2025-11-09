@@ -134,15 +134,19 @@ def generate_fake_glitch_box(level=0):
 
 
 def generate_mutating_frame(base_img, boxes, is_fake=False):
-    """Creates a single corrupted image frame based on the glitch boxes."""
+    """
+    MODIFIED: Creates a visual difference between real and fake glitches.
+    - Real (is_fake=False): Inverted and high contrast (3.0).
+    - Fake (is_fake=True): No inversion and moderate contrast (1.5).
+    """
     frame = base_img.copy()
     
     # boxes can be a single box or a list of boxes
     if not isinstance(boxes, list):
         boxes = [boxes]
         
-    # Fake glitches are slightly less intense (contrast 2.0 vs 3.0)
-    contrast_level = 2.0 if is_fake else 3.0
+    # Set visual parameters based on type
+    contrast_level = 1.5 if is_fake else 3.0
     
     for box in boxes:
         x1, y1, x2, y2 = box
@@ -157,7 +161,12 @@ def generate_mutating_frame(base_img, boxes, is_fake=False):
             shard_box = (sx, sy, sx + w_shard, sy + h_shard)
             try:
                 shard = frame.crop(shard_box).convert("RGB")
-                shard = ImageOps.invert(shard)
+                
+                if not is_fake:
+                    # REAL glitch: High contrast, inverted colors
+                    shard = ImageOps.invert(shard) 
+                
+                # Apply contrast
                 shard = ImageEnhance.Contrast(shard).enhance(contrast_level)
                 frame.paste(shard, shard_box)
             except:
@@ -179,8 +188,8 @@ def generate_scaled_gif(img_path, original_boxes, target_width, level_idx, glitc
         for x1, y1, x2, y2 in original_boxes:
              scaled_real_boxes.append((int(x1 * scale_factor), int(y1 * scale_factor), int(x2 * scale_factor), int(y2 * scale_factor)))
 
-        # Generating FAKE boxes (1 for L1/L2, 2 for L3/L4)
-        num_fakes = level_idx + 1 # L1: 1 fake, L2: 2 fakes, L3: 3 fakes, L4: 4 fakes
+        # Generating FAKE boxes (1 for L1, 2 for L2, 3 for L3, 4 for L4)
+        num_fakes = level_idx + 1 
         
         scaled_fake_boxes = []
         for _ in range(num_fakes):
@@ -190,20 +199,18 @@ def generate_scaled_gif(img_path, original_boxes, target_width, level_idx, glitc
 
 
         frames = []
-        # Create base frames with REAL glitches
+        # Create base frames
         for _ in range(15):
             frames.append(base_img.copy())
         
-        # Add REAL glitch mutations
+        # Add REAL and FAKE glitch mutations to the mutating frames
         for _ in range(8):
-            # Pass all real boxes for mutation
-            frames.append(generate_mutating_frame(base_img, original_boxes, is_fake=False)) 
-        
-        # Add FAKE glitch mutations (to make them visible on the GIF)
-        # Note: We apply fake mutations to the frames that *already* have real mutations
-        for i in range(8):
-             frames[15 + i] = generate_mutating_frame(frames[15 + i], scaled_fake_boxes, is_fake=True)
-
+            # Start with the real glitch mutation (inverted/high contrast)
+            mutated_frame = generate_mutating_frame(base_img, original_boxes, is_fake=False)
+            
+            # Layer the fake glitch mutation (non-inverted/low contrast) on top
+            mutated_frame = generate_mutating_frame(mutated_frame, scaled_fake_boxes, is_fake=True)
+            frames.append(mutated_frame)
 
         temp_file = f"/tmp/lvl_{level_idx}_{glitch_seed}.gif"
         frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15 + [70]*8, loop=0)
@@ -218,7 +225,7 @@ def validate_usn(usn):
     """Basic validation for a typical USN format (e.g., 1MS22AI000)."""
     return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
 
-# --- GOOGLE SHEETS FUNCTIONS (No changes needed here) ---
+# --- GOOGLE SHEETS FUNCTIONS ---
 
 conn = None
 try:
