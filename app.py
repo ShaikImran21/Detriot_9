@@ -102,17 +102,15 @@ def trigger_static_transition():
 
 def get_new_glitch_box(level=0):
     """
-    Generates a new, generally smaller random bounding box for a glitch.
-    The size decreases slightly as the level increases.
+    MODIFIED: Generates aggressively smaller glitch boxes for increased difficulty per level.
     """
-    # Max size is capped around 150 (was 250)
-    max_size = max(150 - level * 10, 50) 
+    # Max size reduction increased: capped around 150 - (Level * 20)
+    max_size = max(150 - level * 20, 30) 
     
-    # Min size is capped around 50 (was 100)
-    min_size = max(50 - level * 5, 30) 
+    # Min size reduction increased: capped around 50 - (Level * 10)
+    min_size = max(50 - level * 10, 15) 
     
-    # Ensure min_size doesn't exceed max_size
-    min_size = min(min_size, max_size) 
+    min_size = min(min_size, max_size) # Ensure min doesn't exceed max
     
     w = random.randint(min_size, max_size)
     h = random.randint(min_size, max_size)
@@ -173,6 +171,7 @@ def generate_scaled_gif(img_path, original_box, target_width, level_idx, glitch_
 
 def validate_usn(usn):
     """Basic validation for a typical USN format (e.g., 1MS22AI000)."""
+    # Using regex from previous context
     return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
 
 # --- STREAMLIT WIDGET FUNCTIONS ---
@@ -289,7 +288,6 @@ if st.session_state.game_state == "menu":
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
     
-    # Check if the level index exceeds the reduced number of levels
     if lvl_idx >= len(GLITCHES_PER_LEVEL):
         lvl_idx = len(GLITCHES_PER_LEVEL) - 1
         
@@ -302,14 +300,12 @@ elif st.session_state.game_state == "playing":
         elapsed_game_time = time.time() - st.session_state.start_time
         st.markdown(f"**TIME: {elapsed_game_time:.1f}s**")
     with col3:
-        # UPDATED: Display current level based on the reduced list length (5)
         st.markdown(f"**LEVEL: {lvl_idx + 1}/{len(GLITCHES_PER_LEVEL)}**") 
 
     hits = st.session_state.hits
     progress_frac = hits / glitches_needed if glitches_needed > 0 else 0
     st.progress(progress_frac, text=f"Glitches Neutralized: {hits} / {glitches_needed}")
 
-    # The use of LEVEL_FILES[lvl_idx] is safe as long as lvl_idx < len(LEVEL_FILES) (which is 5)
     gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx, st.session_state.glitch_seed)
 
     if gif_path and scaled_box:
@@ -324,8 +320,9 @@ elif st.session_state.game_state == "playing":
                 trigger_static_transition()
                 st.session_state.hits += 1
                 move_glitch() 
+                
                 if st.session_state.hits >= glitches_needed:
-                    # Check if there are more levels in the reduced list
+                    # Check if there are more levels in the reduced list (5)
                     if lvl_idx < len(GLITCHES_PER_LEVEL) - 1:
                         st.session_state.current_level += 1
                         st.session_state.hits = 0
