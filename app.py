@@ -13,16 +13,17 @@ import re
 st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 700
-HIT_TOLERANCE = 100
+# MODIFIED: Reduced hit tolerance for higher difficulty
+HIT_TOLERANCE = 50 
+# NEW: Timeout constant
+GLITCH_TIMEOUT = 5.0 
 
-# NOTE: These files must exist in an 'assets' folder relative to your app.py
 LEVEL_FILES = [
     "assets/level1.png", "assets/level2.png", "assets/level3.png",
-    "assets/level4.png", "assets/level5.png", "assets/level6.png",
-    "assets/level7.png", "assets/level8.png", "assets/level9.png"
+    "assets/level4.png", "assets/level5.png"
 ]
 
-GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10] 
+GLITCHES_PER_LEVEL = [4, 5, 6, 7, 8] # Total 30 Glitches
 
 # --- HELPER FUNCTIONS ---
 
@@ -101,23 +102,14 @@ def trigger_static_transition():
     placeholder.empty()
 
 def get_new_glitch_box(level=0):
-    """
-    MODIFIED: Generates a new, generally smaller random bounding box for a glitch.
-    The size decreases slightly as the level increases.
-    """
-    # New Max size is capped around 150 (was 250)
-    max_size = max(75 - level * 10, 50) 
-    
-    # New Min size is capped around 50 (was 100)
-    min_size = max(25 - level * 5, 30) 
-    
-    # Ensure min_size doesn't exceed max_size
+    """Generates a new, generally smaller random bounding box for a glitch."""
+    max_size = max(150 - level * 10, 50) 
+    min_size = max(50 - level * 5, 30) 
     min_size = min(min_size, max_size) 
     
     w = random.randint(min_size, max_size)
     h = random.randint(min_size, max_size)
     
-    # Assuming the original image is 1024x1024 
     x1 = random.randint(50, 1024 - w - 50)
     y1 = random.randint(50, 1024 - h - 50)
     
@@ -189,7 +181,7 @@ if 'game_state' not in st.session_state:
         'player_name': '', 
         'player_usn': '',  
         'final_time': 0.0,
-        'last_move_time': time.time(),
+        'last_move_time': time.time(), # This is the key for the timeout
         'glitch_seed': random.randint(1, 100000),
         'current_box': get_new_glitch_box(),
         'hits': 0,
@@ -288,8 +280,10 @@ if st.session_state.game_state == "menu":
 
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
+    
     if lvl_idx >= len(GLITCHES_PER_LEVEL):
         lvl_idx = len(GLITCHES_PER_LEVEL) - 1
+        
     glitches_needed = GLITCHES_PER_LEVEL[lvl_idx]
 
     col1, col2, col3 = st.columns(3)
@@ -299,11 +293,17 @@ elif st.session_state.game_state == "playing":
         elapsed_game_time = time.time() - st.session_state.start_time
         st.markdown(f"**TIME: {elapsed_game_time:.1f}s**")
     with col3:
-        st.markdown(f"**LEVEL: {lvl_idx + 1}/{len(GLITCHES_PER_LEVEL)}**")
+        st.markdown(f"**LEVEL: {lvl_idx + 1}/{len(GLITCHES_PER_LEVEL)}**") 
 
     hits = st.session_state.hits
     progress_frac = hits / glitches_needed if glitches_needed > 0 else 0
     st.progress(progress_frac, text=f"Glitches Neutralized: {hits} / {glitches_needed}")
+
+    # NEW LOGIC: Check for timeout
+    if time.time() - st.session_state.last_move_time > GLITCH_TIMEOUT:
+        st.toast(f"TIMEOUT! RELOCATING... ({GLITCH_TIMEOUT:.1f}s elapsed)", icon="⌛")
+        move_glitch()
+        st.rerun()
 
     gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx, st.session_state.glitch_seed)
 
@@ -314,7 +314,7 @@ elif st.session_state.game_state == "playing":
             x1, y1, x2, y2 = scaled_box
             cx, cy = coords['x'], coords['y']
 
-            # Check if the click is within the expanded hit tolerance area
+            # Check if the click is within the expanded hit tolerance area (now smaller)
             if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
                 trigger_static_transition()
                 st.session_state.hits += 1
