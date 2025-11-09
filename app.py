@@ -19,7 +19,7 @@ LEVEL_FILES = [
     "assets/level7.png", "assets/level8.png", "assets/level9.png"
 ]
 
-GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10]  # Club promo low glitch count per level
+GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10]  # Low glitch count per level for club promo
 
 def get_base64(bin_file):
     try:
@@ -206,14 +206,13 @@ elif st.session_state.game_state == "playing":
                 st.session_state.hits += 1
                 move_glitch()  # Change glitch box and reduce size immediately after hit
                 if st.session_state.hits >= glitches_needed:
-                    if lvl_idx < 8:
+                    if lvl_idx < len(GLITCHES_PER_LEVEL) - 1:
                         st.session_state.current_level += 1
                         st.session_state.hits = 0
-                        st.rerun()
                     else:
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
-                        st.rerun()
+                st.rerun()
             else:
                 st.toast("MISS! RELOCATING...", icon="❌")
                 move_glitch()
