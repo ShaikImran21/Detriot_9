@@ -12,24 +12,8 @@ st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initia
 
 # --- SETTINGS ---
 GAME_WIDTH = 700
-HIT_TOLERANCE = 80
-
-# --- CONNECTION DOCTOR (DEBUGGER) ---
-# This will appear at the top of your app to tell you if it's working.
-# Once it works, you can delete this section.
-with st.expander("🔌 CONNECTION STATUS (Click to view)", expanded=True):
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        st.success("✅ SECRETS FOUND: Streamlit can see your credentials.")
-        try:
-            test_df = conn.read(worksheet="Scores", ttl=0)
-            st.success("✅ READ PERMISSION: Can read the 'Scores' tab.")
-            st.info(f"Current Leaderboard Entries: {len(test_df)}")
-        except Exception as e:
-            st.error(f"❌ READ FAILED: Could not read 'Scores' tab. Did you rename 'Sheet1' to 'Scores'?")
-            st.error(f"Error details: {e}")
-    except Exception as e:
-        st.error("❌ SECRETS MISSING: details not found in .streamlit/secrets.toml")
+# HARDCORE MODE: Tolerance reduced to 15 pixels. Precision required.
+HIT_TOLERANCE = 15
 
 # --- HELPER: ASSET LOADER ---
 def get_base64(bin_file):
@@ -47,7 +31,7 @@ def inject_css():
         .stApp::after {
             content: " "; display: block; position: fixed; top: 0; left: 0; bottom: 0; right: 0;
             background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            z-index: 999; background-size: 100% 3px, 3px 100%; pointer-events: none; opacity: 0.2;
+            z-index: 999; background-size: 100% 3px, 3px 100%; pointer-events: none; opacity: 0.15;
         }
         h1 { animation: glitch-text 500ms infinite; }
         @keyframes glitch-text {
@@ -100,13 +84,16 @@ def generate_scaled_gif(img_path, original_box, target_width, level_idx):
         scaled_box = (int(x1 * scale_factor), int(y1 * scale_factor), int(x2 * scale_factor), int(y2 * scale_factor))
         frames = []
         base_crop = base_img.crop(scaled_box)
+        # 15 NORMAL FRAMES (approx 3 seconds wait)
         for _ in range(15): frames.append(base_img.copy())
-        for _ in range(6):
+        # 8 CHAOS FRAMES (approx 0.8 seconds visibility)
+        for _ in range(8):
             frame = base_img.copy()
             frame.paste(create_chaos_frame(base_crop), scaled_box)
             frames.append(frame)
-        temp_file = f"level_{level_idx}_chaos.gif"
-        frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15 + [60]*6, loop=0)
+        temp_file = f"level_{level_idx}_hardcore.gif"
+        # 200ms normal, 100ms chaos
+        frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15 + [100]*8, loop=0)
         return temp_file, scaled_box
     except: return None, None
 
@@ -128,21 +115,25 @@ inject_css()
 if 'game_state' not in st.session_state:
     st.session_state.update({'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'final_time': 0.0})
 
-# --- LEADERBOARD FUNCTIONS ---
+conn = None
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+except: pass
+
 def save_score(tag, time_val):
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        conn.update(worksheet="Scores", data=pd.DataFrame([{"Tag": tag, "Time": time_val}]))
-        return True
-    except: return False
+    if conn:
+        try: conn.update(worksheet="Scores", data=pd.DataFrame([{"Tag": tag, "Time": time_val}])); return True
+        except: return False
+    return False
 
 def get_leaderboard():
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read(worksheet="Scores", ttl=0).dropna(how="all")
-        df['Time'] = pd.to_numeric(df['Time'], errors='coerce').dropna()
-        return df.sort_values('Time').head(10).reset_index(drop=True)
-    except: return pd.DataFrame(columns=["Rank", "Tag", "Time (Offline)"])
+    if conn:
+        try:
+            df = conn.read(worksheet="Scores", ttl=0).dropna(how="all")
+            df['Time'] = pd.to_numeric(df['Time'], errors='coerce').dropna()
+            return df.sort_values('Time').head(10).reset_index(drop=True)
+        except: pass
+    return pd.DataFrame(columns=["Rank", "Tag", "Time (Offline)"])
 
 # --- GAME LOOP ---
 st.title("DETROIT: ANOMALY [09]")
@@ -154,7 +145,7 @@ if st.session_state.game_state == "menu":
             st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 'current_level': 0})
             st.rerun()
     st.markdown("### TOP AGENTS")
-    st.dataframe(get_leaderboard(), hide_index=True)
+    st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
 
 elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
@@ -167,6 +158,7 @@ elif st.session_state.game_state == "playing":
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}", width=GAME_WIDTH)
         if coords:
             x1, y1, x2, y2 = scaled_box
+            # HARDCORE HIT DETECTION
             if (x1 - HIT_TOLERANCE) <= coords['x'] <= (x2 + HIT_TOLERANCE) and \
                (y1 - HIT_TOLERANCE) <= coords['y'] <= (y2 + HIT_TOLERANCE):
                 trigger_static_transition()
@@ -185,7 +177,7 @@ elif st.session_state.game_state == "game_over":
         if save_score(st.session_state.player_tag, st.session_state.final_time):
             st.success("DATA UPLOADED.")
         else:
-            st.error("UPLOAD FAILED. CHECK PERMISSIONS.")
+            st.error("UPLOAD FAILED.")
         time.sleep(2); st.session_state.game_state = 'menu'; st.rerun()
     st.markdown("### GLOBAL RANKINGS")
-    st.dataframe(get_leaderboard(), hide_index=True)
+    st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
