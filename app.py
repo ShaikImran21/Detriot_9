@@ -2,6 +2,7 @@ import streamlit as st
 import time
 import pandas as pd
 import random
+import os
 import base64
 from PIL import Image, ImageOps, ImageEnhance
 from streamlit_gsheets import GSheetsConnection
@@ -14,16 +15,19 @@ st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initia
 GAME_WIDTH = 700
 HIT_TOLERANCE = 100
 
+# MODIFIED: Reduced to 4 levels
 LEVEL_FILES = [
     "assets/level1.png", "assets/level2.png", "assets/level3.png",
     "assets/level4.png"
 ]
 
-GLITCHES_PER_LEVEL = [3, 5, 7, 7]
+# MODIFIED: 4 levels with a total of 22 real glitches (3+5+7+7)
+GLITCHES_PER_LEVEL = [3, 5, 7, 7] 
 
 # --- HELPER FUNCTIONS ---
 
 def get_base64(bin_file):
+    """Encodes a local file to base64 for use in HTML/CSS."""
     try:
         with open(bin_file, 'rb') as f:
             return base64.b64encode(f.read()).decode()
@@ -31,8 +35,10 @@ def get_base64(bin_file):
         return None
 
 def inject_css():
+    """Injects CSS for dark theme, film grain, and global glitch effect."""
     st.markdown("""
         <style>
+            /* --- BASE STYLES & FILM GRAIN --- */
             .stApp { 
                 background-color: #080808; 
                 color: #d0d0d0; 
@@ -45,6 +51,7 @@ def inject_css():
                 display: flex; 
                 flex-direction: column; 
             }
+            /* Film Grain Effect (Applied to the whole background) */
             .stApp::after {
                 content: " "; 
                 position: fixed; 
@@ -57,6 +64,8 @@ def inject_css():
                 opacity: 0.15; 
                 z-index: 999;
             }
+            
+            /* --- GLOBAL GLITCH EFFECT --- */
             h1, h2, h3, h4, p, .stMarkdown, .stText, 
             .stButton > button, .stTextInput > div > div > input, 
             .stDataFrame, .stProgress > div > div, 
@@ -64,6 +73,8 @@ def inject_css():
                 animation: glitch-text 500ms infinite; 
                 white-space: nowrap; 
             }
+            
+            /* Keyframe definition for the text shadow glitch */
             @keyframes glitch-text {
                 0%,14% { text-shadow: 0.05em 0 0 #f44, -0.05em -0.025em 0 #2f2, 0.025em 0.05em 0 #34f; }
                 15%,49% { text-shadow: -0.05em -0.025em 0 #f44, 0.025em 0.025em 0 #2f2, -0.05em -0.05em 0 #34f; }
@@ -74,40 +85,54 @@ def inject_css():
     """, unsafe_allow_html=True)
 
 def trigger_static_transition():
+    """Creates a brief static/glitch visual and sound effect."""
     st.markdown('<audio src="https://www.myinstants.com/media/sounds/static-noise.mp3" autoplay style="display:none;"></audio>', unsafe_allow_html=True)
     placeholder = st.empty()
     with placeholder.container():
         st.markdown('<div style="position:fixed;top:0;left:0;width:100%;height:100%;background-color:#111;z-index:10000;"></div>', unsafe_allow_html=True)
         time.sleep(0.1)
+        # Fallback GIF URL if local assets fails
         g_url = "https://media.giphy.com/media/oEI9uBYSzLpBK/giphy.gif"
         st.markdown(f'<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:url({g_url});background-size:cover;z-index:10001;opacity:0.8;mix-blend-mode:hard-light;"></div>', unsafe_allow_html=True)
         time.sleep(0.4)
     placeholder.empty()
 
 def get_new_glitch_box(level=0):
-    max_size = max(150 - level * 20, 30)
-    min_size = max(50 - level * 10, 15)
-    min_size = min(min_size, max_size)
+    """Generates aggressively smaller glitch boxes for increased difficulty per level."""
+    max_size = max(150 - level * 20, 30) 
+    min_size = max(50 - level * 10, 15) 
+    min_size = min(min_size, max_size) 
+    
     w = random.randint(min_size, max_size)
     h = random.randint(min_size, max_size)
+    
     x1 = random.randint(50, 1024 - w - 50)
     y1 = random.randint(50, 1024 - h - 50)
+    
     return (x1, y1, x1 + w, y1 + h)
 
 def generate_fake_glitch_box(level=0):
-    max_size = max(180 - level * 15, 60)
-    min_size = max(70 - level * 5, 40)
+    """Generates a slightly larger, non-target glitch box (decoy)."""
+    max_size = max(180 - level * 15, 60) 
+    min_size = max(70 - level * 5, 40) 
+    
     w = random.randint(min_size, max_size)
     h = random.randint(min_size, max_size)
+    
     x1 = random.randint(50, 1024 - w - 50)
     y1 = random.randint(50, 1024 - h - 50)
     return (x1, y1, x1 + w, y1 + h)
 
+
 def generate_mutating_frame(base_img, boxes, is_fake=False):
+    """Creates a visual difference between real (high contrast) and fake (low contrast) glitches."""
     frame = base_img.copy()
+    
     if not isinstance(boxes, list):
         boxes = [boxes]
-    contrast_level = 1.0 if is_fake else 3.0
+        
+    contrast_level = 1.0 if is_fake else 3.0 
+    
     for box in boxes:
         x1, y1, x2, y2 = box
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
@@ -121,7 +146,9 @@ def generate_mutating_frame(base_img, boxes, is_fake=False):
             shard_box = (sx, sy, sx + w_shard, sy + h_shard)
             try:
                 shard = frame.crop(shard_box).convert("RGB")
-                shard = ImageOps.invert(shard)
+                
+                shard = ImageOps.invert(shard) 
+                
                 shard = ImageEnhance.Contrast(shard).enhance(contrast_level)
                 frame.paste(shard, shard_box)
             except:
@@ -130,35 +157,46 @@ def generate_mutating_frame(base_img, boxes, is_fake=False):
 
 @st.cache_data(show_spinner=False, persist="disk")
 def generate_scaled_gif(img_path, original_boxes, target_width, level_idx, glitch_seed):
+    """Generates and caches the pulsating glitch GIF, including fakes."""
     try:
         random.seed(glitch_seed)
         base_img = Image.open(img_path).convert("RGB")
         scale_factor = target_width / base_img.width
         target_height = int(base_img.height * scale_factor)
         base_img = base_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+        
         scaled_real_boxes = []
         for x1, y1, x2, y2 in original_boxes:
-            scaled_real_boxes.append((int(x1 * scale_factor), int(y1 * scale_factor), int(x2 * scale_factor), int(y2 * scale_factor)))
-        num_fakes = level_idx + 1
+             scaled_real_boxes.append((int(x1 * scale_factor), int(y1 * scale_factor), int(x2 * scale_factor), int(y2 * scale_factor)))
+
+        num_fakes = level_idx + 1 
+        
         scaled_fake_boxes = []
         for _ in range(num_fakes):
             fake_box = generate_fake_glitch_box(level_idx)
             x1, y1, x2, y2 = fake_box
             scaled_fake_boxes.append((int(x1 * scale_factor), int(y1 * scale_factor), int(x2 * scale_factor), int(y2 * scale_factor)))
+
+
         frames = []
         for _ in range(15):
             frames.append(base_img.copy())
+        
         for _ in range(8):
             mutated_frame = generate_mutating_frame(base_img, original_boxes, is_fake=False)
             mutated_frame = generate_mutating_frame(mutated_frame, scaled_fake_boxes, is_fake=True)
             frames.append(mutated_frame)
+
         temp_file = f"/tmp/lvl_{level_idx}_{glitch_seed}.gif"
         frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15 + [70]*8, loop=0)
+
         return temp_file, scaled_real_boxes, scaled_fake_boxes
     except:
         return None, [], []
 
+
 def validate_usn(usn):
+    """Basic validation for a typical USN format (e.g., 1MS22AI000)."""
     return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
 
 # --- GOOGLE SHEETS FUNCTIONS ---
@@ -167,9 +205,10 @@ conn = None
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception:
-    pass
+    pass 
 
 def save_score(tag, name, usn, time_val):
+    """Saves the score, name, and USN to the Google Sheet."""
     if conn:
         try:
             df = pd.DataFrame([{"Tag": tag, "Name": name, "USN": usn, "Time": time_val}])
@@ -180,42 +219,61 @@ def save_score(tag, name, usn, time_val):
     return False
 
 def get_leaderboard():
-    """Fetches, cleans, and sorts the leaderboard data."""
+    """
+    MODIFIED: Fetches, cleans, and sorts the leaderboard data, 
+    with explicit column reading and dtype for robust operation.
+    """
     if conn:
         try:
-            df = conn.read(worksheet="Scores", ttl=0)
-            if df.empty or 'Time' not in df.columns or 'USN' not in df.columns or 'Tag' not in df.columns or 'Name' not in df.columns:
-                st.info("No leaderboard data or missing headers. Ensure the 'Scores' sheet has headers: Tag, Name, USN, Time, and at least one score entry.")
+            # Force string types for text columns and float for Time column
+            # This is the final fix to bypass data type reading errors from Google Sheets
+            DTYPE_MAP = {
+                'Tag': str, 
+                'Name': str, 
+                'USN': str, 
+                'Time': float
+            }
+            
+            df = conn.read(
+                worksheet="Scores", 
+                ttl=0, 
+                usecols=['Tag', 'Name', 'USN', 'Time'],
+                dtype=DTYPE_MAP
+            ).dropna(subset=['Time']).copy()
+            
+            # Remove any rows where Time is NaN (if conversion failed silently)
+            df.dropna(subset=['Time'], inplace=True)
+            
+            if df.empty:
                 return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
-            
-            df = df.dropna(subset=['Time', 'USN', 'Tag', 'Name']).copy()
-            df['Time'] = pd.to_numeric(df['Time'], errors='coerce')
-            df = df.dropna(subset=['Time'])
-            
-            df = df[['Tag', 'Name', 'USN', 'Time']]
-            df = df.sort_values(by='Time', ascending=True)
+
+            df.sort_values(by='Time', ascending=True, inplace=True)
             df['Rank'] = range(1, len(df) + 1)
             df['Time'] = df['Time'].apply(lambda x: f"{x:.2f}s")
+            
             return df[['Rank', 'Name', 'USN', 'Time']].head(10).reset_index(drop=True)
-        
         except Exception as e:
-            st.error(f"Leaderboard read failure: {str(e)}")
-            return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
-    else:
-        st.info("No connection to leaderboard. Check your secrets.toml and ensure Google Sheets API permissions are correct.")
-        return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
+            # You can see the error in the console by uncommenting the line below
+            # st.error(f"DEBUG: Read Error: {e}") 
+            pass 
+    return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
+
 
 def move_glitch(num_glitches=1):
+    """Generates 1 or 2 new target glitch boxes."""
     lvl = st.session_state.current_level
     st.session_state.glitch_seed = random.randint(1, 100000)
+    
     real_boxes = [get_new_glitch_box(level=lvl) for _ in range(num_glitches)]
     st.session_state.current_boxes = real_boxes
     st.session_state.last_move_time = time.time()
 
+# --- INITIALIZATION & MAIN APP LOGIC ---
+
 inject_css()
 
 def get_num_real_targets(level_idx):
-    if level_idx in [2, 3]:
+    if level_idx in [2, 3]: 
         return 2
     return 1
 
@@ -268,8 +326,8 @@ if st.session_state.game_state == "menu":
         leaderboard_df.columns = ["Rank", "Name", "USN", "Time"]
         st.dataframe(leaderboard_df, hide_index=True, use_container_width=True)
     elif conn and leaderboard_df.empty:
-        st.warning("⚠️ Online Connection OK, but Leaderboard is empty or Read Failed.")
-        st.info("Ensure the **Scores** sheet has the headers: **Tag, Name, USN, Time** in row 1, and manually add one score to start.")
+         st.warning("⚠️ Online Connection OK, but Leaderboard is empty or Read Failed.")
+         st.info("Ensure the **Scores** sheet has the headers: **Tag, Name, USN, Time** in row 1, and manually add one score to start.")
     else:
         st.error("❌ Leaderboard Connection Failed. (Check secrets.toml/sharing permissions)")
         st.dataframe(leaderboard_df, hide_index=True, use_container_width=True) 
@@ -306,14 +364,18 @@ elif st.session_state.game_state == "playing":
             cx, cy = coords['x'], coords['y']
             hit_made = False
             
+            # 1. Check if the click hits any REAL glitch box
             for x1, y1, x2, y2 in scaled_real_boxes:
-                if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
+                if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and \
+                   (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
                     hit_made = True
                     break
 
+            # 2. Check if the click hits any FAKE glitch box
             is_fake_hit = False
             for x1, y1, x2, y2 in scaled_fake_boxes:
-                if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
+                if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and \
+                   (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
                     is_fake_hit = True
                     break
 
@@ -344,6 +406,7 @@ elif st.session_state.game_state == "playing":
     else:
         st.error(f"Error loading level file: {LEVEL_FILES[lvl_idx]}")
 
+
 elif st.session_state.game_state == "game_over":
     st.balloons()
     st.markdown("## SIMULATION COMPLETE!")
@@ -354,6 +417,7 @@ elif st.session_state.game_state == "game_over":
     if st.button(">> UPLOAD SCORE <<", type="primary"):
         with st.spinner("TRANSMITTING DATA..."):
             upload_success = save_score(st.session_state.player_tag, st.session_state.player_name, st.session_state.player_usn, st.session_state.final_time)
+
             if upload_success:
                 st.success("DATA UPLOADED. MISSION SUCCESSFUL.")
             else:
