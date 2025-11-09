@@ -19,7 +19,7 @@ LEVEL_FILES = [
     "assets/level7.png", "assets/level8.png", "assets/level9.png"
 ]
 
-GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10]
+GLITCHES_PER_LEVEL = [2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 def get_base64(bin_file):
     try:
