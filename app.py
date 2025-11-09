@@ -11,7 +11,7 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 700
-HIT_TOLERANCE = 70
+HIT_TOLERANCE = 0  # Circular hitbox handled separately
 
 LEVEL_FILES = [
     "assets/level1.png", "assets/level2.png", "assets/level3.png",
@@ -19,7 +19,7 @@ LEVEL_FILES = [
     "assets/level7.png", "assets/level8.png", "assets/level9.png"
 ]
 
-GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10]  # Low glitch count per level for club promo
+GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10]
 
 def get_base64(bin_file):
     try:
@@ -30,26 +30,26 @@ def get_base64(bin_file):
 
 def inject_css():
     st.markdown("""
-        <style>
-            .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
-            #MainMenu, footer, header {visibility: hidden;}
-            .block-container { justify-content: center; align-items: center; display: flex; flex-direction: column; }
-            .stApp::after {
-                content: " "; position: fixed; inset: 0;
-                background:
-                    linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.25) 50%),
-                    linear-gradient(90deg, rgba(255,0,0,0.06), rgba(0,255,0,0.02), rgba(0,0,255,0.06));
-                background-size: 100% 3px, 3px 100%;
-                pointer-events: none; opacity: 0.15; z-index: 999;
-            }
-            h1 { animation: glitch-text 500ms infinite; }
-            @keyframes glitch-text {
-                0%,14% { text-shadow: 0.05em 0 0 #f44, -0.05em -0.025em 0 #2f2, 0.025em 0.05em 0 #34f; }
-                15%,49% { text-shadow: -0.05em -0.025em 0 #f44, 0.025em 0.025em 0 #2f2, -0.05em -0.05em 0 #34f; }
-                50%,99% { text-shadow: 0.025em 0.05em 0 #f44, 0.05em 0 0 #2f2, 0 -0.05em 0 #34f; }
-                100% { text-shadow: -0.025em 0 0 #f44, -0.025em -0.025em 0 #2f2, -0.025em -0.05em 0 #34f; }
-            }
-        </style>
+    <style>
+        .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
+        #MainMenu, footer, header {visibility: hidden;}
+        .block-container { justify-content: center; align-items: center; display: flex; flex-direction: column; }
+        .stApp::after {
+            content: " "; position: fixed; inset: 0;
+            background:
+                linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.25) 50%),
+                linear-gradient(90deg, rgba(255,0,0,0.06), rgba(0,255,0,0.02), rgba(0,0,255,0.06));
+            background-size: 100% 3px, 3px 100%;
+            pointer-events: none; opacity: 0.15; z-index: 999;
+        }
+        h1 { animation: glitch-text 500ms infinite; }
+        @keyframes glitch-text {
+            0%,14% { text-shadow: 0.05em 0 0 #f44, -0.05em -0.025em 0 #2f2, 0.025em 0.05em 0 #34f; }
+            15%,49% { text-shadow: -0.05em -0.025em 0 #f44, 0.025em 0.025em 0 #2f2, -0.05em -0.05em 0 #34f; }
+            50%,99% { text-shadow: 0.025em 0.05em 0 #f44, 0.05em 0 0 #2f2, 0 -0.05em 0 #34f; }
+            100% { text-shadow: -0.025em 0 0 #f44, -0.025em -0.025em 0 #2f2, -0.025em -0.05em 0 #34f; }
+        }
+    </style>
     """, unsafe_allow_html=True)
 
 def trigger_static_transition():
@@ -134,6 +134,7 @@ if 'game_state' not in st.session_state:
         'glitch_seed': random.randint(1, 100000),
         'current_box': get_new_glitch_box(),
         'hits': 0,
+        'glitch_active': True,
     })
 
 conn = None
@@ -166,6 +167,7 @@ def move_glitch():
     lvl = st.session_state.current_level
     st.session_state.glitch_seed = random.randint(1, 100000)
     st.session_state.current_box = get_new_glitch_box(level=lvl)
+    st.session_state.glitch_active = True
     st.session_state.last_move_time = time.time()
 
 st.title("DETROIT: ANOMALY [09]")
@@ -175,7 +177,7 @@ if st.session_state.game_state == "menu":
     if st.button(">> START SIMULATION <<", type="primary"):
         if len(tag) == 3:
             move_glitch()
-            st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
+            st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 'current_level': 0, 'hits': 0, 'glitch_active': True})
             st.rerun()
     st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
 
@@ -197,14 +199,23 @@ elif st.session_state.game_state == "playing":
     if gif_path and scaled_box:
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
 
-        if coords:
+        if coords and st.session_state.glitch_active:
             x1, y1, x2, y2 = scaled_box
             cx, cy = coords['x'], coords['y']
 
-            if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
+            cx_center = (x1 + x2) / 2
+            cy_center = (y1 + y2) / 2
+            radius = min(x2 - x1, y2 - y1) / 3  # Hitbox 1/3 size of glitch box
+
+            dx = cx - cx_center
+            dy = cy - cy_center
+            distance_squared = dx * dx + dy * dy
+
+            if distance_squared <= radius * radius:
+                st.session_state.glitch_active = False
                 trigger_static_transition()
                 st.session_state.hits += 1
-                move_glitch()  # Change glitch box and reduce size immediately after hit
+                move_glitch()  # ONLY reload glitch on static screen
                 if st.session_state.hits >= glitches_needed:
                     if lvl_idx < len(GLITCHES_PER_LEVEL) - 1:
                         st.session_state.current_level += 1
@@ -214,8 +225,8 @@ elif st.session_state.game_state == "playing":
                         st.session_state.game_state = 'game_over'
                 st.rerun()
             else:
-                st.toast("MISS! RELOCATING...", icon="❌")
-                move_glitch()
+                st.toast("MISS! PLEASE CLICK AGAIN", icon="❌")
+                # Here, DO NOT move glitch on miss to keep glitch stationary
                 st.rerun()
 
 elif st.session_state.game_state == "game_over":
