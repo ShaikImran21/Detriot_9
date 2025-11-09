@@ -11,7 +11,7 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 700
-HIT_TOLERANCE = 100
+HIT_TOLERANCE = 100  # You can adjust hit tolerance as required
 
 LEVEL_FILES = [
     "assets/level1.png", "assets/level2.png", "assets/level3.png",
@@ -19,7 +19,7 @@ LEVEL_FILES = [
     "assets/level7.png", "assets/level8.png", "assets/level9.png"
 ]
 
-GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10]  # Low glitch count per level for club promo
+GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10]
 
 def get_base64(bin_file):
     try:
