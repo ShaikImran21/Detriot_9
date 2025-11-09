@@ -66,14 +66,11 @@ def inject_css():
             }
             
             /* --- GLOBAL GLITCH EFFECT --- */
-            /* Target all headings, paragraphs, and Streamlit content containers */
             h1, h2, h3, h4, p, .stMarkdown, .stText, 
             .stButton > button, .stTextInput > div > div > input, 
             .stDataFrame, .stProgress > div > div, 
             .stTextInput > label, .stMarkdown > div { 
-                /* Apply the animation to almost every visible text element */
                 animation: glitch-text 500ms infinite; 
-                /* Prevent text from collapsing due to glitchy text-shadow */
                 white-space: nowrap; 
             }
             
@@ -134,13 +131,14 @@ def generate_fake_glitch_box(level=0):
 
 
 def generate_mutating_frame(base_img, boxes, is_fake=False):
-    """Creates a visual difference between real and fake glitches."""
+    """Creates a visual difference between real (high contrast) and fake (low contrast) glitches."""
     frame = base_img.copy()
     
     if not isinstance(boxes, list):
         boxes = [boxes]
         
-    contrast_level = 1.0 if is_fake else 3.0 # Low contrast (1.0) for confusing fake
+    # Set visual parameters based on type: 3.0 for bright/real, 1.0 for murky/fake
+    contrast_level = 1.0 if is_fake else 3.0 
     
     for box in boxes:
         x1, y1, x2, y2 = box
@@ -156,7 +154,7 @@ def generate_mutating_frame(base_img, boxes, is_fake=False):
             try:
                 shard = frame.crop(shard_box).convert("RGB")
                 
-                # Both real and fake are inverted for confusion
+                # Both real and fake are inverted for maximum confusion
                 shard = ImageOps.invert(shard) 
                 
                 # Apply contrast (low for fake, high for real)
@@ -192,23 +190,20 @@ def generate_scaled_gif(img_path, original_boxes, target_width, level_idx, glitc
 
 
         frames = []
-        # Create base frames
         for _ in range(15):
             frames.append(base_img.copy())
         
-        # Add REAL and FAKE glitch mutations to the mutating frames
         for _ in range(8):
-            # Start with the real glitch mutation (inverted/high contrast)
+            # 1. Real glitch mutation (inverted/high contrast)
             mutated_frame = generate_mutating_frame(base_img, original_boxes, is_fake=False)
             
-            # Layer the fake glitch mutation (inverted/low contrast) on top
+            # 2. Layer the fake glitch mutation (inverted/low contrast) on top
             mutated_frame = generate_mutating_frame(mutated_frame, scaled_fake_boxes, is_fake=True)
             frames.append(mutated_frame)
 
         temp_file = f"/tmp/lvl_{level_idx}_{glitch_seed}.gif"
         frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15 + [70]*8, loop=0)
 
-        # Return the path, the REAL target boxes, and the FAKE boxes
         return temp_file, scaled_real_boxes, scaled_fake_boxes
     except:
         return None, [], []
@@ -218,7 +213,7 @@ def validate_usn(usn):
     """Basic validation for a typical USN format (e.g., 1MS22AI000)."""
     return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
 
-# --- GOOGLE SHEETS FUNCTIONS (Modified to allow graceful failure) ---
+# --- GOOGLE SHEETS FUNCTIONS ---
 
 conn = None
 try:
@@ -242,7 +237,6 @@ def get_leaderboard():
     """Fetches, cleans, and sorts the leaderboard data."""
     if conn:
         try:
-            # We use conn.read to also verify the connection status
             df = conn.read(worksheet="Scores", ttl=0).dropna(subset=['Time', 'USN']).copy()
             df['Time'] = pd.to_numeric(df['Time'], errors='coerce')
             df.dropna(subset=['Time'], inplace=True)
@@ -272,7 +266,7 @@ inject_css()
 
 def get_num_real_targets(level_idx):
     # Levels 0, 1, 2, 3 correspond to L1, L2, L3, L4
-    if level_idx in [2, 3]: # L3 and L4 (indices 2 and 3)
+    if level_idx in [2, 3]: # L3 and L4 (indices 2 and 3) require 2 targets
         return 2
     return 1
 
@@ -308,7 +302,7 @@ if st.session_state.game_state == "menu":
         
     if start_button:
         num_targets = get_num_real_targets(0)
-        move_glitch(num_targets) # Start L1 with 1 target
+        move_glitch(num_targets) 
         st.session_state.update({
             'game_state': 'playing', 'player_tag': tag, 'player_name': name, 
             'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0
@@ -327,10 +321,10 @@ if st.session_state.game_state == "menu":
         st.dataframe(leaderboard_df, hide_index=True, use_container_width=True)
     elif conn and leaderboard_df.empty:
          st.warning("⚠️ Online Connection OK, but Leaderboard is empty or Read Failed.")
-         st.info("Ensure the **Scores** sheet has the headers: **Tag, Name, USN, Time** in row 1.")
+         st.info("Ensure the **Scores** sheet has the headers: **Tag, Name, USN, Time** in row 1, and manually add one score to start.")
     else:
         st.error("❌ Leaderboard Connection Failed. (Check secrets.toml/sharing permissions)")
-        st.dataframe(leaderboard_df, hide_index=True, use_container_width=True) # Shows empty table
+        st.dataframe(leaderboard_df, hide_index=True, use_container_width=True) 
     # --- END STATUS CHECK ---
 
 elif st.session_state.game_state == "playing":
@@ -339,7 +333,7 @@ elif st.session_state.game_state == "playing":
         lvl_idx = len(GLITCHES_PER_LEVEL) - 1
         
     glitches_needed = GLITCHES_PER_LEVEL[lvl_idx]
-    targets_on_screen = get_num_real_targets(lvl_idx) # 1 or 2
+    targets_on_screen = get_num_real_targets(lvl_idx)
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -414,8 +408,6 @@ elif st.session_state.game_state == "game_over":
     st.write(f"**OPERATIVE:** {st.session_state.player_name}")
     st.write(f"**USN:** {st.session_state.player_usn}")
     st.write(f"**FINAL TIME:** {st.session_state.final_time:.2f}s")
-    
-    upload_success = True # Assume success unless proven otherwise
     
     if st.button(">> UPLOAD SCORE <<", type="primary"):
         with st.spinner("TRANSMITTING DATA..."):
