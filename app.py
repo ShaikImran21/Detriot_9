@@ -7,7 +7,7 @@ import base64
 from PIL import Image, ImageOps, ImageEnhance
 from streamlit_gsheets import GSheetsConnection
 from streamlit_image_coordinates import streamlit_image_coordinates
-import re # Import regex for USN validation
+import re 
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
@@ -15,17 +15,19 @@ st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initia
 GAME_WIDTH = 700
 HIT_TOLERANCE = 100
 
+# NOTE: These files must exist in an 'assets' folder relative to your app.py
 LEVEL_FILES = [
     "assets/level1.png", "assets/level2.png", "assets/level3.png",
     "assets/level4.png", "assets/level5.png", "assets/level6.png",
     "assets/level7.png", "assets/level8.png", "assets/level9.png"
 ]
 
-GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10]  # Low glitch count per level for club promo
+GLITCHES_PER_LEVEL = [2,3,4,5,6,7,8,9,10] 
 
 # --- HELPER FUNCTIONS ---
 
 def get_base64(bin_file):
+    """Encodes a local file to base64 for use in HTML/CSS."""
     try:
         with open(bin_file, 'rb') as f:
             return base64.b64encode(f.read()).decode()
@@ -33,20 +35,49 @@ def get_base64(bin_file):
         return None
 
 def inject_css():
+    """Injects CSS for dark theme, film grain, and global glitch effect."""
     st.markdown("""
         <style>
-            .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
+            /* --- BASE STYLES & FILM GRAIN --- */
+            .stApp { 
+                background-color: #080808; 
+                color: #d0d0d0; 
+                font-family: 'Courier New', monospace; 
+            }
             #MainMenu, footer, header {visibility: hidden;}
-            .block-container { justify-content: center; align-items: center; display: flex; flex-direction: column; }
+            .block-container { 
+                justify-content: center; 
+                align-items: center; 
+                display: flex; 
+                flex-direction: column; 
+            }
+            /* Film Grain Effect (Applied to the whole background) */
             .stApp::after {
-                content: " "; position: fixed; inset: 0;
+                content: " "; 
+                position: fixed; 
+                inset: 0;
                 background:
                     linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.25) 50%),
                     linear-gradient(90deg, rgba(255,0,0,0.06), rgba(0,255,0,0.02), rgba(0,0,255,0.06));
                 background-size: 100% 3px, 3px 100%;
-                pointer-events: none; opacity: 0.15; z-index: 999;
+                pointer-events: none; 
+                opacity: 0.15; 
+                z-index: 999;
             }
-            h1 { animation: glitch-text 500ms infinite; }
+            
+            /* --- GLOBAL GLITCH EFFECT --- */
+            /* Target all headings, paragraphs, and Streamlit content containers */
+            h1, h2, h3, h4, p, .stMarkdown, .stText, 
+            .stButton > button, .stTextInput > div > div > input, 
+            .stDataFrame, .stProgress > div > div, 
+            .stTextInput > label, .stMarkdown > div { 
+                /* Apply the animation to almost every visible text element */
+                animation: glitch-text 500ms infinite; 
+                /* Prevent text from collapsing due to glitchy text-shadow */
+                white-space: nowrap; 
+            }
+            
+            /* Keyframe definition for the text shadow glitch */
             @keyframes glitch-text {
                 0%,14% { text-shadow: 0.05em 0 0 #f44, -0.05em -0.025em 0 #2f2, 0.025em 0.05em 0 #34f; }
                 15%,49% { text-shadow: -0.05em -0.025em 0 #f44, 0.025em 0.025em 0 #2f2, -0.05em -0.05em 0 #34f; }
@@ -57,27 +88,31 @@ def inject_css():
     """, unsafe_allow_html=True)
 
 def trigger_static_transition():
+    """Creates a brief static/glitch visual and sound effect."""
     st.markdown('<audio src="https://www.myinstants.com/media/sounds/static-noise.mp3" autoplay style="display:none;"></audio>', unsafe_allow_html=True)
     placeholder = st.empty()
     with placeholder.container():
         st.markdown('<div style="position:fixed;top:0;left:0;width:100%;height:100%;background-color:#111;z-index:10000;"></div>', unsafe_allow_html=True)
         time.sleep(0.1)
-        # Using a generic glitch gif URL as the local asset might not be available
+        # Fallback GIF URL if local assets fail
         g_url = "https://media.giphy.com/media/oEI9uBYSzLpBK/giphy.gif"
         st.markdown(f'<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:url({g_url});background-size:cover;z-index:10001;opacity:0.8;mix-blend-mode:hard-light;"></div>', unsafe_allow_html=True)
         time.sleep(0.4)
     placeholder.empty()
 
 def get_new_glitch_box(level=0):
+    """Calculates a random bounding box for a glitch, shrinking with level."""
     max_size = max(250 - level * 20, 50)
     min_size = max(100 - level * 10, 30)
     w = random.randint(min_size, max_size)
     h = random.randint(min_size, max_size)
+    # Assuming the original image is 1024x1024 (based on context)
     x1 = random.randint(50, 1024 - w - 50)
     y1 = random.randint(50, 1024 - h - 50)
     return (x1, y1, x1 + w, y1 + h)
 
 def generate_mutating_frame(base_img, box):
+    """Creates a single corrupted image frame based on the glitch box."""
     frame = base_img.copy()
     x1, y1, x2, y2 = box
     cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
@@ -100,6 +135,7 @@ def generate_mutating_frame(base_img, box):
 
 @st.cache_data(show_spinner=False, persist="disk")
 def generate_scaled_gif(img_path, original_box, target_width, level_idx, glitch_seed):
+    """Generates and caches the pulsating glitch GIF."""
     try:
         random.seed(glitch_seed)
         base_img = Image.open(img_path).convert("RGB")
@@ -123,6 +159,11 @@ def generate_scaled_gif(img_path, original_box, target_width, level_idx, glitch_
     except:
         return None, None
 
+def validate_usn(usn):
+    """Basic validation for a typical USN format (e.g., 1MS22AI000)."""
+    # Regex checks for: 1 digit (year), 2 letters (college), 2 digits (year), 2 letters (branch), 3 digits (roll)
+    return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
+
 # --- STREAMLIT WIDGET FUNCTIONS ---
 
 inject_css()
@@ -134,8 +175,8 @@ if 'game_state' not in st.session_state:
         'current_level': 0,
         'start_time': 0.0,
         'player_tag': 'UNK',
-        'player_name': '', # New state variable
-        'player_usn': '',  # New state variable
+        'player_name': '', 
+        'player_usn': '',  
         'final_time': 0.0,
         'last_move_time': time.time(),
         'glitch_seed': random.randint(1, 100000),
@@ -150,31 +191,23 @@ try:
 except:
     pass
 
-# Function to validate a typical Indian USN format (e.g., 1MS21CS000 or 1MS22AI000)
-def validate_usn(usn):
-    # Adjust this regex based on MSRIT/VTU's exact format if needed. 
-    # This example validates 1XX2X[A-Z]{2}\d{3}
-    return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
-
-# UPDATED: to save Name and USN
 def save_score(tag, name, usn, time_val):
+    """Saves the score, name, and USN to the Google Sheet."""
     if conn:
         try:
             df = pd.DataFrame([{"Tag": tag, "Name": name, "USN": usn, "Time": time_val}])
-            # Append new score data to the Google Sheet
             conn.write(worksheet="Scores", data=df, append=True)
             return True
         except Exception as e:
-            st.error(f"Error saving score: {e}")
+            # st.error(f"Error saving score: {e}")
             return False
     return False
 
-# UPDATED: to fetch Name and USN
 def get_leaderboard():
+    """Fetches, cleans, and sorts the leaderboard data."""
     if conn:
         try:
             df = conn.read(worksheet="Scores", ttl=0).dropna(subset=['Time', 'USN']).copy()
-            # Ensure 'Time' is numeric and handle potential errors
             df['Time'] = pd.to_numeric(df['Time'], errors='coerce')
             df.dropna(subset=['Time'], inplace=True)
             
@@ -186,14 +219,12 @@ def get_leaderboard():
             
             # Reorder columns for display
             return df[['Rank', 'Name', 'USN', 'Time']].head(10).reset_index(drop=True)
-        except Exception as e:
-            # st.warning(f"Could not load online leaderboard: {e}")
+        except:
             pass
-    # Offline/Fallback Leaderboard
     return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
 
-
 def move_glitch():
+    """Moves the target glitch to a new location and updates the seed."""
     lvl = st.session_state.current_level
     st.session_state.glitch_seed = random.randint(1, 100000)
     st.session_state.current_box = get_new_glitch_box(level=lvl)
@@ -207,7 +238,7 @@ if st.session_state.game_state == "menu":
     
     st.markdown("### OPERATIVE DATA INPUT")
     
-    # Updated User Inputs
+    # User Inputs
     tag = st.text_input(">> AGENT TAG (3 CHARS):", value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '', max_chars=3).upper()
     name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
     usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
@@ -216,10 +247,9 @@ if st.session_state.game_state == "menu":
     
     start_button = st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag) != 3 or not name or not is_valid_usn))
     
-    if len(tag) != 3:
+    # Input validation messages
+    if len(tag) != 3 and tag:
         st.warning("Tag must be exactly 3 characters.")
-    if not name:
-        st.warning("Please enter your full name.")
     if usn and not is_valid_usn:
         st.warning("Invalid USN format. Please check.")
         
@@ -228,18 +258,18 @@ if st.session_state.game_state == "menu":
         st.session_state.update({
             'game_state': 'playing', 
             'player_tag': tag, 
-            'player_name': name, # Save new info
-            'player_usn': usn,   # Save new info
+            'player_name': name, 
+            'player_usn': usn,   
             'start_time': time.time(), 
             'current_level': 0, 
             'hits': 0
         })
         st.rerun()
         
+    st.markdown("---")
     st.markdown("### GLOBAL RANKINGS")
     leaderboard_df = get_leaderboard()
     if not leaderboard_df.empty:
-        # Renaming columns for better display
         leaderboard_df.columns = ["Rank", "Name", "USN", "Time"]
         st.dataframe(leaderboard_df, hide_index=True, use_container_width=True)
     else:
@@ -267,7 +297,6 @@ elif st.session_state.game_state == "playing":
     gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx, st.session_state.glitch_seed)
 
     if gif_path and scaled_box:
-        # The key must change for the image to re-render when the glitch moves
         coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
 
         if coords:
@@ -278,7 +307,7 @@ elif st.session_state.game_state == "playing":
             if (x1 - HIT_TOLERANCE) <= cx <= (x2 + HIT_TOLERANCE) and (y1 - HIT_TOLERANCE) <= cy <= (y2 + HIT_TOLERANCE):
                 trigger_static_transition()
                 st.session_state.hits += 1
-                move_glitch()  # Change glitch box and reduce size immediately after hit
+                move_glitch() 
                 if st.session_state.hits >= glitches_needed:
                     if lvl_idx < len(GLITCHES_PER_LEVEL) - 1:
                         st.session_state.current_level += 1
@@ -302,7 +331,6 @@ elif st.session_state.game_state == "game_over":
     st.write(f"**USN:** {st.session_state.player_usn}")
     st.write(f"**FINAL TIME:** {st.session_state.final_time:.2f}s")
     
-    # Save button updated to use new info
     if st.button(">> UPLOAD SCORE <<", type="primary"):
         with st.spinner("TRANSMITTING DATA..."):
             if save_score(st.session_state.player_tag, st.session_state.player_name, st.session_state.player_usn, st.session_state.final_time):
