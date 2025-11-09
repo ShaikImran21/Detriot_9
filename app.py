@@ -34,6 +34,12 @@ def inject_css():
         .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
         #MainMenu, footer, header {visibility: hidden;}
         .block-container { justify-content: center; align-items: center; display: flex; flex-direction: column; }
+        .glitch-text, h1, label {
+            animation: glitch-text 500ms infinite;
+            font-family: 'Courier New', monospace;
+            color: #d0d0d0;
+            font-weight: bold;
+        }
         .stApp::after {
             content: " "; position: fixed; inset: 0;
             background:
@@ -41,18 +47,6 @@ def inject_css():
                 linear-gradient(90deg, rgba(255,0,0,0.06), rgba(0,255,0,0.02), rgba(0,0,255,0.06));
             background-size: 100% 3px, 3px 100%;
             pointer-events: none; opacity: 0.15; z-index: 999;
-        }
-        .glitch-text {
-            animation: glitch-text 500ms infinite;
-            font-family: 'Courier New', monospace;
-            color: #d0d0d0;
-            font-weight: bold;
-        }
-        table.dataframe thead th {
-            background-color: #080808;
-            font-family: 'Courier New', monospace;
-            color: #d0d0d0;
-            animation: glitch-text 500ms infinite;
         }
         @keyframes glitch-text {
             0%,14% { text-shadow: 0.05em 0 0 #f44, -0.05em -0.025em 0 #2f2, 0.025em 0.05em 0 #34f; }
@@ -186,29 +180,29 @@ def move_glitch():
 
 st.markdown('<h1 class="glitch-text">DETROIT: ANOMALY [09]</h1>', unsafe_allow_html=True)
 
-if st.session_state.game_state == 'menu':
+if st.session_state.game_state == "menu":
     st.markdown('<div class="glitch-text">ENTER YOUR NAME</div>', unsafe_allow_html=True)
     name = st.text_input("NAME:", max_chars=20, value=st.session_state.player_name)
     st.markdown('<div class="glitch-text">ENTER YOUR USN</div>', unsafe_allow_html=True)
     usn = st.text_input("USN:", max_chars=10, value=st.session_state.player_usn)
-    if st.button('>> START SIMULATION <<'):
+    if st.button(">> START SIMULATION <<", type="primary"):
         if len(name.strip()) > 0 and len(usn.strip()) > 0:
             st.session_state.player_name = name.strip()
             st.session_state.player_usn = usn.strip()
             move_glitch()
             st.session_state.update({
-                'game_state': 'playing',
-                'start_time': time.time(),
-                'current_level': 0,
-                'hits': 0,
-                'glitch_active': True,
-                'final_time': 0.0
+                "game_state": "playing",
+                "start_time": time.time(),
+                "current_level": 0,
+                "hits": 0,
+                "glitch_active": True,
+                "final_time": 0.0,
             })
-            st.stop()
+            st.rerun()
         else:
             st.warning("Please enter both Name and USN.")
 
-elif st.session_state.game_state == 'playing':
+elif st.session_state.game_state == "playing":
     lvl_idx = st.session_state.current_level
     if lvl_idx >= len(GLITCHES_PER_LEVEL):
         lvl_idx = len(GLITCHES_PER_LEVEL) - 1
@@ -221,13 +215,20 @@ elif st.session_state.game_state == 'playing':
     progress_frac = hits / glitches_needed if glitches_needed > 0 else 0
     st.progress(progress_frac, text=f"Glitches: {hits} / {glitches_needed}")
 
-    gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx,
-                                               st.session_state.glitch_seed)
+    gif_path, scaled_box = generate_scaled_gif(
+        LEVEL_FILES[lvl_idx],
+        st.session_state.current_box,
+        GAME_WIDTH,
+        lvl_idx,
+        st.session_state.glitch_seed,
+    )
     if gif_path and scaled_box:
-        coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
+        coords = streamlit_image_coordinates(
+            gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH
+        )
         if coords and st.session_state.glitch_active:
             x1, y1, x2, y2 = scaled_box
-            cx, cy = coords['x'], coords['y']
+            cx, cy = coords["x"], coords["y"]
 
             cx_center = (x1 + x2) / 2
             cy_center = (y1 + y2) / 2
@@ -248,23 +249,25 @@ elif st.session_state.game_state == 'playing':
                         st.session_state.hits = 0
                     else:
                         st.session_state.final_time = time.time() - st.session_state.start_time
-                        st.session_state.game_state = 'game_over'
-                st.stop()
+                        st.session_state.game_state = "game_over"
+                st.rerun()
             else:
                 # Do not move glitch or reload level on miss
-                st.stop()
+                st.rerun()
 
-elif st.session_state.game_state == 'game_over':
+elif st.session_state.game_game == "game_over":
     st.balloons()
     st.markdown('<div class="glitch-text">SAVE YOUR TIME</div>', unsafe_allow_html=True)
-    save_time = st.text_input("NAME FOR SCOREBOARD:", max_chars=20, value=st.session_state.player_name)
+    save_time = st.text_input(
+        "NAME FOR SCOREBOARD:", max_chars=20, value=st.session_state.player_name
+    )
     if st.button("SAVE SCORE"):
         if save_score(save_time, st.session_state.player_usn, st.session_state.final_time):
             st.success("SCORE SAVED!")
-            st.session_state.game_state = 'menu'
-            st.stop()
+            st.session_state.game_game = "menu"
+            st.rerun()
         else:
             st.error("FAILED TO SAVE SCORE.")
-    st.markdown('<div class="glitch-text">### GLOBAL LEADERBOARD</div>', unsafe_allow_html=True)
+    st.markdown('<div class="glitch-text">GLOBAL LEADERBOARD</div>', unsafe_allow_html=True)
     leaderboard_df = get_leaderboard()
     st.dataframe(leaderboard_df, use_container_width=True)
