@@ -1,228 +1,269 @@
 import streamlit as st
-import time
 import pandas as pd
-import random
-import os
 import base64
-from PIL import Image, ImageOps, ImageEnhance, ImageFilter, ImageDraw
+import time
+import json
 from streamlit_gsheets import GSheetsConnection
-from streamlit_image_coordinates import streamlit_image_coordinates
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
 
 # --- SETTINGS ---
-GAME_WIDTH = 700
-HIT_TOLERANCE = 40 
-MOVE_DELAY = 4 # Glitch teleports every 4 seconds
-ORIGINAL_IMG_SIZE = 1024 # Assumed size of source images
+MOVE_DELAY_MS = 1000  # 1 SECOND to click! Hardcore.
 
-# --- HELPER: ASSET LOADER ---
+# --- ASSET LOADER ---
 def get_base64(bin_file):
     try:
-        with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
-    except: return None
+        with open(bin_file, 'rb') as f:
+            return f"data:image/png;base64,{base64.b64encode(f.read()).decode()}"
+    except: return ""
 
-# --- CSS: RETRO EFFECTS & TITLE ANIMATION ---
-def inject_css():
-    st.markdown("""
+LEVEL_IMAGES = [get_base64(f"assets/level{i}.png") for i in range(1, 10)]
+# Load glitch texture (gif > avif > nothing)
+GLITCH_ASSET = get_base64("assets/glitch.gif")
+if not GLITCH_ASSET: GLITCH_ASSET = get_base64("assets/glitch.avif")
+
+# --- JAVASCRIPT ENGINE ---
+GAME_HTML = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+    body {{ margin: 0; background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; overflow: hidden; user-select: none; }}
+    #game-container {{ position: relative; width: 700px; height: 700px; margin: 0 auto; border: 2px solid #333; overflow: hidden; }}
+    #level-img {{ width: 100%; height: 100%; object-fit: cover; pointer-events: auto; }}
+    
+    /* --- THE FANCY GLITCH --- */
+    #glitch-target {{
+        position: absolute;
+        z-index: 1000;
+        display: none;
+        border: 2px solid #0f0;
+        /* DATAMOSH EFFECT LAYER */
+        background-image: url('{GLITCH_ASSET}');
+        background-size: cover;
+        mix-blend-mode: hard-light;
+        animation: violent-flash 0.1s infinite;
+        cursor: crosshair;
+    }}
+    @keyframes violent-flash {{
+        0% {{ opacity: 0.8; filter: hue-rotate(0deg) invert(0); }}
+        50% {{ opacity: 0.6; filter: hue-rotate(180deg) invert(1); }}
+        100% {{ opacity: 0.9; filter: hue-rotate(0deg) invert(0); }}
+    }}
+
+    #hud {{ position: absolute; top: 10px; left: 10px; z-index: 1001; background: rgba(0,0,0,0.7); padding: 5px 10px; pointer-events: none; font-size: 20px; }}
+    #timer-bar {{ position: absolute; top: 0; left: 0; height: 8px; background-color: #f00; width: 100%; z-index: 1002; }}
+    
+    /* CRT EFFECT */
+    .scanlines {{
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 9999;
+        background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+        background-size: 100% 4px, 3px 100%; opacity: 0.3;
+    }}
+
+    #game-over-screen {{
+        display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.95); color: #0f0; z-index: 2000;
+        flex-direction: column; justify-content: center; align-items: center; text-align: center;
+    }}
+    .copy-code {{ font-size: 42px; font-weight: bold; color: #fff; background: #000; padding: 20px; border: 4px dashed #0f0; margin: 20px; user-select: all; cursor: pointer; }}
+</style>
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div id="game-container">
+        <div id="timer-bar"></div>
+        <div id="hud">SECTOR: <span id="sector-num">01</span> / 09</div>
+        <img id="level-img" src="">
+        <div id="glitch-target" onmousedown="hitGlitch(event)"></div> <div id="game-over-screen">
+            <h1>SIMULATION COMPLETE</h1>
+            <p>FINAL TIME:</p>
+            <div class="copy-code" id="time-code" onclick="selectText(this)">0.00</div>
+            <p>▲ COPY THIS CODE BELOW ▲</p>
+        </div>
+    </div>
+
+<script>
+    const LEVELS = {json.dumps(LEVEL_IMAGES)};
+    let currentLevel = 0;
+    let startTime = 0;
+    let lastMoveTime = 0;
+    let gameActive = false;
+    let animationFrameId;
+
+    const glitch = document.getElementById('glitch-target');
+    const levelImg = document.getElementById('level-img');
+    const timerBar = document.getElementById('timer-bar');
+
+    function startGame() {{
+        currentLevel = 0;
+        gameActive = true;
+        startTime = Date.now();
+        loadLevel(0);
+        gameLoop();
+    }}
+
+    function loadLevel(idx) {{
+        document.getElementById('sector-num').innerText = '0' + (idx + 1);
+        levelImg.src = LEVELS[idx];
+        moveGlitch();
+    }}
+
+    function moveGlitch() {{
+        lastMoveTime = Date.now();
+        // Random size (80-250px)
+        let w = Math.floor(Math.random() * 170) + 80;
+        let h = Math.floor(Math.random() * 170) + 80;
+        let x = Math.floor(Math.random() * (700 - w));
+        let y = Math.floor(Math.random() * (700 - h));
+        glitch.style.width = w + 'px';
+        glitch.style.height = h + 'px';
+        glitch.style.left = x + 'px';
+        glitch.style.top = y + 'px';
+        glitch.style.display = 'block';
+    }}
+
+    function hitGlitch(e) {{
+        if (!gameActive) return;
+        e.stopPropagation();
+        
+        // WHITE FLASH TRANSITION
+        let flash = document.createElement('div');
+        flash.style.position = 'fixed'; flash.style.top = 0; flash.style.left = 0;
+        flash.style.width = '100%'; flash.style.height = '100%';
+        flash.style.backgroundColor = 'white'; flash.style.zIndex = 99999;
+        document.body.appendChild(flash);
+        setTimeout(() => flash.remove(), 50);
+
+        currentLevel++;
+        if (currentLevel < 9) {{
+            loadLevel(currentLevel);
+        }} else {{
+            endGame();
+        }}
+    }}
+
+    function endGame() {{
+        gameActive = false;
+        cancelAnimationFrame(animationFrameId);
+        let totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        document.getElementById('time-code').innerText = totalTime;
+        document.getElementById('game-over-screen').style.display = 'flex';
+    }}
+
+    function gameLoop() {{
+        if (!gameActive) return;
+        let elapsed = Date.now() - lastMoveTime;
+        let timeLeft = {MOVE_DELAY_MS} - elapsed;
+        let pct = Math.max(0, (timeLeft / {MOVE_DELAY_MS}) * 100);
+        timerBar.style.width = pct + '%';
+
+        // Color change for urgency
+        if (pct < 30) timerBar.style.backgroundColor = '#f00';
+        else timerBar.style.backgroundColor = '#0f0';
+
+        if (elapsed > {MOVE_DELAY_MS}) {{
+            moveGlitch(); // Auto-teleport
+        }}
+        animationFrameId = requestAnimationFrame(gameLoop);
+    }}
+    
+    function selectText(node) {{
+        if (document.body.createTextRange) {{
+            const range = document.body.createTextRange();
+            range.moveToElementText(node);
+            range.select();
+        }} else if (window.getSelection) {{
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }}
+    }}
+
+    // START
+    setTimeout(startGame, 500); // Brief delay to let assets load
+
+    // MISS PENALTY
+    levelImg.onmousedown = function() {{
+        if (gameActive) {{
+            document.body.style.backgroundColor = '#500';
+            setTimeout(() => document.body.style.backgroundColor = '#080808', 50);
+            moveGlitch();
+        }}
+    }}
+</script>
+</body>
+</html>
+"""
+
+# --- TITLE WITH GLITCH CSS ---
+st.markdown("""
     <style>
-        .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
-        #MainMenu, footer, header {visibility: hidden;}
-        .block-container { justify-content: center; align-items: center; display: flex; flex-direction: column; }
-
-        /* 1. CRT SCANLINE & FILM GRAIN OVERLAY */
-        .stApp::after {
-            content: " "; display: block; position: fixed; top: 0; left: 0; bottom: 0; right: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            z-index: 999; background-size: 100% 3px, 3px 100%; pointer-events: none; opacity: 0.2;
-        }
-
-        /* 2. GLITCHED TITLE EFFECT */
-        h1 {
-            position: relative;
-            text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75);
-            animation: glitch-text 500ms infinite;
-        }
-        @keyframes glitch-text {
-            0% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.05em -0.025em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
-            14% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.05em -0.025em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
-            15% { text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }
-            49% { text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }
-            50% { text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }
-            99% { text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }
-            100% { text-shadow: -0.025em 0 0 rgba(255,0,0,0.75), -0.025em -0.025em 0 rgba(0,255,0,0.75), -0.025em -0.05em 0 rgba(0,0,255,0.75); }
-        }
+    @keyframes glitch-title {
+        0% { text-shadow: 2px 2px 0px #f00, -2px -2px 0px #0ff; }
+        90% { text-shadow: 2px 2px 0px #f00, -2px -2px 0px #0ff; }
+        91% { text-shadow: -5px 5px 0px #f00, 5px -5px 0px #0ff; transform: skew(5deg); }
+        92% { text-shadow: 5px -5px 0px #f00, -5px 5px 0px #0ff; transform: skew(-5deg); }
+        93% { text-shadow: 0px 0px 0px #f00, 0px 0px 0px #0ff; transform: none; }
+        100% { text-shadow: 2px 2px 0px #f00, -2px -2px 0px #0ff; }
+    }
+    .glitch-title {
+        font-size: 3em; font-weight: bold; color: white; text-align: center;
+        animation: glitch-title 2s infinite;
+    }
     </style>
+    <h1 class="glitch-title">DETROIT: ANOMALY [09]</h1>
     """, unsafe_allow_html=True)
 
-# --- TRANSITION ---
-def trigger_static_transition():
-    st.markdown('<audio src="https://www.myinstants.com/media/sounds/static-noise.mp3" autoplay style="display:none;"></audio>', unsafe_allow_html=True)
-    placeholder = st.empty()
-    with placeholder.container():
-        st.markdown('<div style="position:fixed;top:0;left:0;width:100%;height:100%;background-color:#111;z-index:10000;"></div>', unsafe_allow_html=True)
-        time.sleep(0.1)
-        gb64 = get_base64("assets/glitch.gif")
-        if not gb64: gb64 = get_base64("assets/glitch.avif")
-        g_url = f"data:image/gif;base64,{gb64}" if gb64 else "https://media.giphy.com/media/oEI9uBYSzLpBK/giphy.gif"
-        st.markdown(f'<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:url({g_url});background-size:cover;z-index:10001;opacity:0.8;mix-blend-mode:hard-light;"></div>', unsafe_allow_html=True)
-        time.sleep(0.4)
-    placeholder.empty()
-
-# --- RANDOM LOCATION GENERATOR ---
-def get_new_glitch_box():
-    w = random.randint(80, 150)
-    h = random.randint(80, 150)
-    x1 = random.randint(50, ORIGINAL_IMG_SIZE - w - 50)
-    y1 = random.randint(50, ORIGINAL_IMG_SIZE - h - 50)
-    return (x1, y1, x1 + w, y1 + h)
-
-# --- CHAOS GENERATOR (UPDATED FOR VIOLENT MUTATION) ---
-def generate_mutating_frame(base_img, box):
-    frame = base_img.copy()
-    x1, y1, x2, y2 = box
-    cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-    
-    # Generate many random shards per frame for violent mutation
-    for _ in range(random.randint(5, 10)):
-        w_shard = random.randint(int((x2-x1)*0.3), int((x2-x1)*1.5))
-        h_shard = random.randint(int((y2-y1)*0.3), int((y2-y1)*1.5))
-        
-        # Randomly jitter position around the center point
-        sx = max(0, min(cx - w_shard // 2 + random.randint(-50, 50), base_img.width - w_shard))
-        sy = max(0, min(cy - h_shard // 2 + random.randint(-50, 50), base_img.height - h_shard))
-        
-        shard_box = (sx, sy, sx + w_shard, sy + h_shard)
-        try:
-            # Create violent negative/contrast shards
-            shard = frame.crop(shard_box).convert("RGB")
-            shard = ImageOps.invert(shard)
-            shard = ImageEnhance.Contrast(shard).enhance(4.0) # Maximum contrast
-            frame.paste(shard, shard_box)
-        except: pass
-    return frame
-
-@st.cache_data(show_spinner=False, persist="disk")
-def generate_scaled_gif(img_path, original_box, target_width, level_idx, glitch_seed):
-    try:
-        random.seed(glitch_seed)
-        base_img = Image.open(img_path).convert("RGB")
-        scale_factor = target_width / base_img.width
-        target_height = int(base_img.height * scale_factor)
-        base_img = base_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
-
-        x1, y1, x2, y2 = original_box
-        scaled_box = (int(x1 * scale_factor), int(y1 * scale_factor), int(x2 * scale_factor), int(y2 * scale_factor))
-
-        frames = []
-        for _ in range(8): frames.append(base_img.copy())
-        # 8 frames of pure mutation
-        for _ in range(8): frames.append(generate_mutating_frame(base_img, scaled_box))
-            
-        temp_file = f"lvl_{level_idx}_{glitch_seed}.gif"
-        # Fast 80ms frame rate for violent animation
-        frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=80, loop=0)
-        return temp_file, scaled_box
-    except: return None, None
-
-# --- GAME DATA ---
-LEVEL_FILES = [
-    "assets/level1.png", "assets/level2.png", "assets/level3.png",
-    "assets/level4.png", "assets/level5.png", "assets/level6.png",
-    "assets/level7.png", "assets/level8.png", "assets/level9.png"
-]
-
-# --- INIT ---
-inject_css()
+# --- GAME STATES ---
 if 'game_state' not in st.session_state:
-    st.session_state.update({
-        'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'final_time': 0.0,
-        'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000),
-        'current_box': get_new_glitch_box()
-    })
+    st.session_state.game_state = 'menu'
 
-conn = None
-try: conn = st.connection("gsheets", type=GSheetsConnection)
-except: pass
+if st.session_state.game_state == 'menu':
+    col1, col2 = st.columns([2,1])
+    with col1:
+        tag = st.text_input("OPERATIVE TAG (3 CHARS):", max_chars=3).upper()
+    with col2:
+        st.write("") # Spacer
+        st.write("")
+        if st.button(">> INITIALIZE <<", type="primary", use_container_width=True):
+            if len(tag) == 3:
+                st.session_state.player_tag = tag
+                st.session_state.game_state = 'playing'
+                st.rerun()
 
-def save_score(tag, time_val):
-    if conn:
-        try: conn.update(worksheet="Scores", data=pd.DataFrame([{"Tag": tag, "Time": time_val}])); return True
-        except: return False
-    return False
-
-def get_leaderboard():
-    if conn:
-        try:
-            df = conn.read(worksheet="Scores", ttl=0).dropna(how="all")
-            df['Time'] = pd.to_numeric(df['Time'], errors='coerce').dropna()
-            return df.sort_values('Time').head(10).reset_index(drop=True)
-        except: pass
-    return pd.DataFrame(columns=["Rank", "Tag", "Time (Offline)"])
-
-# --- GAME LOOP ---
-st.title("DETROIT: ANOMALY [09]")
-
-# AUTO-TELEPORT LOGIC
 if st.session_state.game_state == 'playing':
-    if time.time() - st.session_state.last_move_time > MOVE_DELAY:
-        st.session_state.glitch_seed = random.randint(1, 100000)
-        st.session_state.current_box = get_new_glitch_box()
-        st.session_state.last_move_time = time.time()
-        st.rerun()
+    # RENDER THE JS GAME
+    components.html(GAME_HTML, height=720)
+    
+    st.markdown("---")
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        final_time_input = st.text_input("PASTE FINAL TIME HERE:", placeholder="e.g., 18.45")
+    with c2:
+        st.write("") # spacer
+        st.write("")
+        if st.button("SUBMIT SCORE", type="primary", use_container_width=True):
+            try:
+                time_val = float(final_time_input)
+                # --- SAVE TO SHEETS ---
+                conn = st.connection("gsheets", type=GSheetsConnection)
+                conn.update(worksheet="Scores", data=pd.DataFrame([{"Tag": st.session_state.player_tag, "Time": time_val}]))
+                st.success("UPLOAD COMPLETE.")
+                time.sleep(2)
+                st.session_state.game_state = 'menu'
+                st.rerun()
+            except:
+                st.error("ERROR: INVALID TIME OR CONNECTION FAILED.")
 
-if st.session_state.game_state == "menu":
-    tag = st.text_input("OPERATIVE TAG (3 CHARS):", max_chars=3).upper()
-    if st.button(">> START SIMULATION <<", type="primary"):
-        if len(tag) == 3:
-            st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'start_time': time.time(), 'current_level': 0, 'last_move_time': time.time(), 'current_box': get_new_glitch_box()})
-            st.rerun()
-    st.markdown("### TOP AGENTS")
-    st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
-
-elif st.session_state.game_state == "playing":
-    lvl_idx = st.session_state.current_level
-    # Progress bar
-    time_left = max(0, MOVE_DELAY - (time.time() - st.session_state.last_move_time))
-    st.progress(time_left / MOVE_DELAY, text=f"SECTOR 0{lvl_idx + 1} // SHIFT IN {time_left:.1f}s")
-
-    gif_path, scaled_box = generate_scaled_gif(LEVEL_FILES[lvl_idx], st.session_state.current_box, GAME_WIDTH, lvl_idx, st.session_state.glitch_seed)
-
-    if gif_path and scaled_box:
-        coords = streamlit_image_coordinates(gif_path, key=f"lvl_{lvl_idx}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
-        if coords:
-            x1, y1, x2, y2 = scaled_box
-            if (x1 - HIT_TOLERANCE) <= coords['x'] <= (x2 + HIT_TOLERANCE) and \
-               (y1 - HIT_TOLERANCE) <= coords['y'] <= (y2 + HIT_TOLERANCE):
-                trigger_static_transition()
-                if lvl_idx < 8: 
-                    st.session_state.current_level += 1
-                    st.session_state.last_move_time = time.time()
-                    st.rerun()
-                else: 
-                    st.session_state.final_time = time.time() - st.session_state.start_time
-                    st.session_state.game_state = 'game_over'
-                    st.rerun()
-            else:
-                 # Missed click -> Teleport immediately
-                 st.session_state.glitch_seed = random.randint(1, 100000)
-                 st.session_state.current_box = get_new_glitch_box()
-                 st.session_state.last_move_time = time.time()
-                 st.rerun()
-    else:
-        st.error("ASSET ERROR: Ensure 'assets/levelX.png' exist.")
-
-    time.sleep(0.1)
-    st.rerun()
-
-elif st.session_state.game_state == "game_over":
-    st.balloons()
-    st.write(f"AGENT: {st.session_state.player_tag} | TIME: {st.session_state.final_time:.2f}s")
-    if st.button("UPLOAD SCORE", type="primary"):
-        if save_score(st.session_state.player_tag, st.session_state.final_time):
-            st.success("DATA UPLOADED.")
-        else:
-            st.error("UPLOAD FAILED.")
-        time.sleep(2); st.session_state.game_state = 'menu'; st.rerun()
-    st.markdown("### GLOBAL RANKINGS")
-    st.dataframe(get_leaderboard(), hide_index=True, use_container_width=True)
+# LEADERBOARD ALWAYS VISIBLE
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    df = conn.read(worksheet="Scores", ttl=5).dropna()
+    df['Time'] = pd.to_numeric(df['Time'])
+    st.markdown("### GLOBAL OPERATIVES")
+    st.dataframe(df.sort_values('Time').head(10).reset_index(drop=True), use_container_width=True)
+except: pass
