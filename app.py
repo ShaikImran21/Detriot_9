@@ -101,14 +101,26 @@ def trigger_static_transition():
     placeholder.empty()
 
 def get_new_glitch_box(level=0):
-    """Calculates a random bounding box for a glitch, shrinking with level."""
-    max_size = max(250 - level * 20, 50)
-    min_size = max(100 - level * 10, 30)
+    """
+    MODIFIED: Generates a new, generally smaller random bounding box for a glitch.
+    The size decreases slightly as the level increases.
+    """
+    # New Max size is capped around 150 (was 250)
+    max_size = max(150 - level * 10, 50) 
+    
+    # New Min size is capped around 50 (was 100)
+    min_size = max(50 - level * 5, 30) 
+    
+    # Ensure min_size doesn't exceed max_size
+    min_size = min(min_size, max_size) 
+    
     w = random.randint(min_size, max_size)
     h = random.randint(min_size, max_size)
-    # Assuming the original image is 1024x1024 (based on context)
+    
+    # Assuming the original image is 1024x1024 
     x1 = random.randint(50, 1024 - w - 50)
     y1 = random.randint(50, 1024 - h - 50)
+    
     return (x1, y1, x1 + w, y1 + h)
 
 def generate_mutating_frame(base_img, box):
@@ -161,7 +173,6 @@ def generate_scaled_gif(img_path, original_box, target_width, level_idx, glitch_
 
 def validate_usn(usn):
     """Basic validation for a typical USN format (e.g., 1MS22AI000)."""
-    # Regex checks for: 1 digit (year), 2 letters (college), 2 digits (year), 2 letters (branch), 3 digits (roll)
     return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
 
 # --- STREAMLIT WIDGET FUNCTIONS ---
