@@ -20,7 +20,7 @@ def get_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- CSS ---
+# --- CSS: RETRO EFFECTS ---
 def inject_css():
     st.markdown("""
     <style>
@@ -106,31 +106,23 @@ LEVELS = [
     {"img": "assets/level9.png", "glitch_box": (440, 380, 510, 455)}, 
 ]
 
-# --- INIT & CONNECTION ---
+# --- INIT ---
 inject_css()
 if 'game_state' not in st.session_state:
     st.session_state.update({'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'final_time': 0.0})
 
+# FAILSAFE CONNECTION ATTEMPT
 conn = None
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
-except Exception as e:
-    st.error(f"CONNECTION ERROR: {e}") # Show connection error immediately if it happens on load
+except:
+    pass # Allow app to load even if connection fails
 
-# --- DEBUG SAVE FUNCTION ---
-def save_score_debug(tag, time_val):
-    if not conn:
-        st.error("Cannot save: No connection to Google Sheets.")
-        return False
-    try:
-        st.info("Attempting to save score...")
-        # Ensure your sheet has a tab named exactly "Scores"
-        conn.update(worksheet="Scores", data=pd.DataFrame([{"Tag": tag, "Time": time_val}]))
-        return True
-    except Exception as e:
-        # THIS IS THE CRITICAL PART: IT WILL SHOW YOU WHY IT FAILED
-        st.error(f"SAVE FAILED! Error details: {e}")
-        return False
+def save_score(tag, time_val):
+    if conn:
+        try: conn.update(worksheet="Scores", data=pd.DataFrame([{"Tag": tag, "Time": time_val}])); return True
+        except: return False
+    return False
 
 def get_leaderboard():
     if conn:
@@ -178,15 +170,11 @@ elif st.session_state.game_state == "playing":
 elif st.session_state.game_state == "game_over":
     st.balloons()
     st.write(f"AGENT: {st.session_state.player_tag} | TIME: {st.session_state.final_time:.2f}s")
-    
-    # UPDATED UPLOAD BUTTON WITH DEBUGGING
     if st.button("UPLOAD SCORE", type="primary"):
-        if save_score_debug(st.session_state.player_tag, st.session_state.final_time):
-            st.success("DATA UPLOADED SUCCESSFULLY.")
-            time.sleep(2)
-            st.session_state.game_state = 'menu'
-            st.rerun()
-        # If it fails, it will now STAY on this screen and show the red error message above.
-        
+        if save_score(st.session_state.player_tag, st.session_state.final_time):
+            st.success("DATA UPLOADED.")
+        else:
+            st.error("CONNECTION FAILED. CHECK SECRETS.")
+        time.sleep(2); st.session_state.game_state = 'menu'; st.rerun()
     st.markdown("### GLOBAL RANKINGS")
     st.dataframe(get_leaderboard(), hide_index=True)
