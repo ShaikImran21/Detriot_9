@@ -13,6 +13,7 @@ import re
 st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 700
+# HIGH TOLERANCE for touch screens (fingers are less precise than cursors)
 HIT_TOLERANCE = 100 
 
 LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png", "assets/level4.png"]
@@ -24,56 +25,50 @@ def get_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- CSS: ULTRA GLITCH + FORCE DESKTOP + MOBILE FIX ---
+# --- CSS: ULTRA GLITCH + FORCED DESKTOP ---
 def inject_css():
-    # 1. FORCE STATIC OVERLAY (Explicit HTML is more reliable on mobile than pseudo-elements)
-    st.markdown("""
-        <div id="static-overlay"></div>
-    """, unsafe_allow_html=True)
+    # 1. FORCE STATIC OVERLAY HTML
+    st.markdown('<div id="static-overlay"></div>', unsafe_allow_html=True)
 
     st.markdown("""
         <style>
-            /* BASE THEME */
-            .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
-            #MainMenu, footer, header {visibility: hidden;}
-
-            /* FORCE SCROLLABLE CONTAINER FOR MOBILE */
+            /* --- FORCED DESKTOP MODE HACK --- */
+            /* This forces the page to be at least 850px wide, making mobile browsers zoom out. */
+            html, body, .stApp {
+                min-width: 850px !important;
+                overflow-x: auto !important;
+            }
             .block-container {
                 min-width: 720px !important;
                 max-width: 900px !important;
-                overflow-x: auto !important;
             }
+            /* -------------------------------- */
+
+            /* BASE THEME */
+            .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
+            #MainMenu, footer, header {visibility: hidden;}
             
-            /* NEW HARDWARE-ACCELERATED STATIC OVERLAY */
+            /* HARDWARE-ACCELERATED STATIC OVERLAY */
             #static-overlay {
-                position: fixed;
-                top: -50%; left: -50%; width: 200%; height: 200%;
+                position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
                 background: repeating-linear-gradient(transparent 0px, rgba(0, 0, 0, 0.25) 50%, transparent 100%),
                             repeating-linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-                background-size: 100% 3px, 3px 100%;
-                z-index: 99999;
-                pointer-events: none;
-                opacity: 0.2;
-                animation: gpu-jitter 0.3s infinite linear alternate-reverse;
-                mix-blend-mode: hard-light;
+                background-size: 100% 3px, 3px 100%; z-index: 99999; pointer-events: none; opacity: 0.2;
+                animation: gpu-jitter 0.3s infinite linear alternate-reverse; mix-blend-mode: hard-light;
             }
-
-            /* GPU-Optimized Animation for Mobile */
             @keyframes gpu-jitter {
-                0% { transform: translate3d(0,0,0); opacity: 0.15; }
+                0%, 100% { transform: translate3d(0,0,0); opacity: 0.15; }
                 25% { transform: translate3d(-5px, -5px, 0); opacity: 0.2; }
                 50% { transform: translate3d(5px, 5px, 0); opacity: 0.15; }
                 75% { transform: translate3d(-5px, 5px, 0); opacity: 0.25; }
-                100% { transform: translate3d(0,0,0); opacity: 0.15; }
             }
 
-            /* AGGRESSIVE GLOBAL TEXT GLITCH */
+            /* GLOBAL TEXT GLITCH */
             h1, h2, h3, h4, h5, h6, p, label, span, div, button, a, input, .stDataFrame, .stMarkdown, .stExpander {
-                animation: glitch-text 500ms infinite !important;
-                color: #d0d0d0 !important;
+                animation: glitch-text 500ms infinite !important; color: #d0d0d0 !important;
             }
-            img, #static-overlay { animation: none !important; } /* Protect images and overlay from double glitching */
-            #static-overlay { animation: gpu-jitter 0.3s infinite linear alternate-reverse !important; } /* Re-apply correct animation to overlay */
+            img, #static-overlay { animation: none !important; }
+            #static-overlay { animation: gpu-jitter 0.3s infinite linear alternate-reverse !important; }
 
             @keyframes glitch-text {
                 0% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
@@ -98,7 +93,7 @@ def trigger_static_transition():
         time.sleep(0.4)
     placeholder.empty()
 
-# --- GLITCH GENERATION WITH ANTI-OVERLAP ---
+# --- SMART GLITCH GENERATION ---
 def get_random_box(level, is_fake=False):
     if is_fake: max_s, min_s = max(180 - level*15, 60), max(70 - level*5, 40)
     else: max_s, min_s = max(150 - level*20, 30), min(max(50 - level*10, 15), max(150 - level*20, 30))
@@ -210,9 +205,24 @@ if st.session_state.game_state == "menu":
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn))):
         st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'player_name': name, 'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
         move_glitch(get_num_real_targets(0)); st.rerun()
+
+    with st.expander("MISSION BRIEFING // RULES"):
+        st.markdown("""
+        **OBJECTIVE:** NEUTRALIZE ALL ACTIVE ANOMALIES IN MINIMUM TIME.
+        **PROTOCOLS:**
+        1. **IDENTIFY:** Real anomalies are **BRIGHT** and heavily inverted. Decoys are darker.
+        2. **ENGAGE:** Tap precisely on the real anomaly.
+        3. **ADVANCE:** Clear 4 Sectors.
+        4. **CAUTION:** Sectors 3 & 4 contain **MULTIPLE** simultaneous targets.
+        """)
         
     with st.expander("CREDITS // SYSTEM INFO"):
-        st.markdown("**DETROIT: ANOMALY [09]**\n* **Lead Developer:** Shaik Imran\n* **Club:** DeepStation AI MSRIT")
+        st.markdown("""
+        **DETROIT: ANOMALY [09]**
+        * **Lead Developer:** Shaik Imran
+        * **Club:** DeepStation AI MSRIT
+        * **Event:** RECURSION 2024
+        """)
 
     st.markdown("---")
     st.markdown("### GLOBAL RANKINGS")
