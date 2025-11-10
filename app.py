@@ -219,8 +219,8 @@ if st.session_state.game_state == "menu":
     with st.expander("CREDITS // SYSTEM INFO"):
         st.markdown("""
         **DETROIT: ANOMALY [09]**
-        * **Ace
-        * **BoBBY
+        * Ace
+        * BoBBY
         """)
 
     st.markdown("---")
