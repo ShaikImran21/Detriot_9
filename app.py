@@ -214,9 +214,9 @@ if st.session_state.game_state == "menu":
     with st.expander("CREDITS // SYSTEM INFO"):
         st.markdown("""
         **DETROIT: ANOMALY [09]**
-        * **Lead Developer:** Shaik Imran
-        * **Club:** DeepStation AI MSRIT
-        * **Event:** RECURSION 2024
+        * Developed by:
+        * Ace
+        * BoBBY
         """)
 
     st.markdown("---")
