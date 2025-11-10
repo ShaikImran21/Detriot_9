@@ -10,7 +10,7 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 import re 
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 700
 HIT_TOLERANCE = 100
@@ -120,31 +120,36 @@ def save_score(tag, name, usn, time_val):
         except: return False
     return False
 
-def get_leaderboard():
-    """NUCLEAR READ MODE: Forces everything to string first to bypass TypeErrors."""
+def get_leaderboard(debug_mode=False):
+    """NUCLEAR READ MODE with Debug Option"""
     if conn:
         try:
-            # 1. Read EVERYTHING as a string first. safest way possible.
-            df = conn.read(worksheet="Scores", ttl=0, dtype=str)
+            # 1. Raw read of everything
+            df = conn.read(worksheet="Scores", ttl=0)
+            if debug_mode: return df # Return RAW data for debugging
+
+            # 2. Clean headers (remove hidden spaces)
+            df.columns = df.columns.str.strip()
             
-            # 2. Ensure required columns exist
+            # 3. Check for required columns
             req = ['Tag', 'Name', 'USN', 'Time']
             if not all(c in df.columns for c in req): return pd.DataFrame(columns=["Rank"]+req)
 
-            # 3. Manually convert Time to numeric, forcing errors to NaN
-            df['Time'] = pd.to_numeric(df['Time'], errors='coerce')
-            
-            # 4. Drop rows where Time became NaN (invalid data)
-            df.dropna(subset=['Time', 'USN'], inplace=True)
+            # 4. Aggressive data cleaning
+            # Convert to string first to handle strange Excel formats, then replace commas, then to numeric
+            df['Time'] = pd.to_numeric(df['Time'].astype(str).str.replace(',', ''), errors='coerce')
+            df.dropna(subset=['Time', 'USN', 'Tag'], inplace=True)
 
             if df.empty: return pd.DataFrame(columns=["Rank"]+req)
 
-            # 5. Sort and format
+            # 5. Final Format
             df.sort_values(by='Time', ascending=True, inplace=True)
             df['Rank'] = range(1, len(df) + 1)
             df['Time'] = df['Time'].apply(lambda x: f"{x:.2f}s")
             return df[['Rank', 'Name', 'USN', 'Time']].head(10).reset_index(drop=True)
-        except Exception: pass
+        except Exception as e:
+             if debug_mode: return pd.DataFrame({"Error": [str(e)]})
+             pass
     return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
 
 # --- MAIN ---
@@ -162,12 +167,20 @@ if st.session_state.game_state == "menu":
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn))):
         st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'player_name': name, 'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
         move_glitch(get_num_real_targets(0)); st.rerun()
+        
     st.markdown("---")
     st.markdown("### GLOBAL RANKINGS")
     lb = get_leaderboard()
-    if not lb.empty: st.dataframe(lb, hide_index=True, use_container_width=True)
-    elif conn: st.warning("Connection OK. Waiting for data (ensure 'Scores' sheet has data in row 2).")
-    else: st.error("Connection Failed.")
+    if conn and not lb.empty:
+        st.dataframe(lb, hide_index=True, use_container_width=True)
+    elif conn and lb.empty:
+         st.warning("⚠️ Connection OK, but no valid data found.")
+         with st.expander("🔍 VIEW DEBUG INFO (Click if Leaderboard is missing)"):
+             st.write("Raw Data from Sheet:")
+             st.dataframe(get_leaderboard(debug_mode=True))
+             st.info("If you see your data above but not in the main leaderboard, check column names for spaces!")
+    else:
+        st.error("❌ Connection Failed.")
 
 elif st.session_state.game_state == "playing":
     lvl = st.session_state.current_level
