@@ -13,8 +13,8 @@ import re
 st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 700
-# HIGH TOLERANCE for touch screens (fingers are less precise than cursors)
-HIT_TOLERANCE = 100 
+# MAXIMUM TOLERANCE: Very easy to hit now, perfect for all mobile users.
+HIT_TOLERANCE = 150 
 
 LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png", "assets/level4.png"]
 GLITCHES_PER_LEVEL = [3, 5, 7, 7] 
@@ -25,28 +25,23 @@ def get_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- CSS: ULTRA GLITCH + FORCED DESKTOP ---
+# --- CSS: ULTRA GLITCH + MOBILE FIX ---
 def inject_css():
-    # 1. FORCE STATIC OVERLAY HTML
+    # 1. FORCE STATIC OVERLAY (HTML for better mobile support)
     st.markdown('<div id="static-overlay"></div>', unsafe_allow_html=True)
 
     st.markdown("""
         <style>
-            /* --- FORCED DESKTOP MODE HACK --- */
-            /* This forces the page to be at least 850px wide, making mobile browsers zoom out. */
-            html, body, .stApp {
-                min-width: 850px !important;
-                overflow-x: auto !important;
-            }
-            .block-container {
-                min-width: 720px !important;
-                max-width: 900px !important;
-            }
-            /* -------------------------------- */
-
             /* BASE THEME */
             .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
             #MainMenu, footer, header {visibility: hidden;}
+
+            /* FORCE HORIZONTAL SCROLL ON MOBILE (Prevents squishing) */
+            .block-container {
+                min-width: 720px !important;
+                max-width: 900px !important;
+                overflow-x: auto !important;
+            }
             
             /* HARDWARE-ACCELERATED STATIC OVERLAY */
             #static-overlay {
@@ -219,8 +214,9 @@ if st.session_state.game_state == "menu":
     with st.expander("CREDITS // SYSTEM INFO"):
         st.markdown("""
         **DETROIT: ANOMALY [09]**
-        * Ace
-        * BoBBY
+        * **Lead Developer:** Shaik Imran
+        * **Club:** DeepStation AI MSRIT
+        * **Event:** RECURSION 2024
         """)
 
     st.markdown("---")
