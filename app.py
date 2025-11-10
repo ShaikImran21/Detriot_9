@@ -10,36 +10,52 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 import re 
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
 
-GAME_WIDTH = 700
-HIT_TOLERANCE = 100
+GAME_WIDTH = 700    # Standard width, usually works okay on mobile landscape
+HIT_TOLERANCE = 60  # Adjusted for balanced difficulty on touch screens
 
 LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png", "assets/level4.png"]
 GLITCHES_PER_LEVEL = [3, 5, 7, 7] 
 
-# --- ALL HELPER FUNCTIONS DEFINED FIRST ---
-
+# --- HELPER: ASSETS ---
 def get_base64(bin_file):
     try:
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
+# --- CSS: ULTRA GLITCH AESTHETIC ---
 def inject_css():
     st.markdown("""
         <style>
+            /* BASE THEME */
             .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
             #MainMenu, footer, header {visibility: hidden;}
-            .block-container { justify-content: center; align-items: center; display: flex; flex-direction: column; }
+            
+            /* ANIMATED GLITCH BACKGROUND */
             .stApp::after {
                 content: " "; display: block; position: fixed; top: 0; left: 0; bottom: 0; right: 0;
                 background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-                z-index: 999; background-size: 100% 3px, 3px 100%; pointer-events: none; opacity: 0.15;
+                z-index: 99999; background-size: 100% 3px, 3px 100%; pointer-events: none; opacity: 0.15;
+                animation: bg-jitter 0.2s infinite;
             }
-            h1 { animation: glitch-text 500ms infinite; }
+            @keyframes bg-jitter {
+                0% { background-position: 0 0; opacity: 0.15; }
+                25% { background-position: -5px 2px; opacity: 0.18; }
+                50% { background-position: 2px -3px; opacity: 0.15; }
+                75% { background-position: 3px 1px; opacity: 0.13; }
+                100% { background-position: 0 0; opacity: 0.15; }
+            }
+
+            /* GLOBAL TEXT GLITCH */
+            /* Targets generic Streamlit classes to hit almost everything */
+            .stMarkdown, .stText, .stTitle, .stHeader, .stSubheader, button, label, input, .stDataFrame {
+                animation: glitch-text 500ms infinite;
+            }
+
             @keyframes glitch-text {
-                0% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.05em -0.025em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
-                14% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.05em -0.025em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
+                0% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
+                14% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
                 15% { text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }
                 49% { text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }
                 50% { text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }
@@ -60,17 +76,55 @@ def trigger_static_transition():
         time.sleep(0.4)
     placeholder.empty()
 
-def get_new_glitch_box(level=0):
-    max_size = max(150 - level * 20, 30) 
-    min_size = max(50 - level * 10, 15) 
-    min_size = min(min_size, max_size) 
-    w, h = random.randint(min_size, max_size), random.randint(min_size, max_size)
-    return (random.randint(50, 1024-w-50), random.randint(50, 1024-h-50), random.randint(50, 1024-w-50)+w, random.randint(50, 1024-h-50)+h)
+# --- GLITCH GENERATION WITH NO OVERLAP ---
+def get_random_box(level, is_fake=False):
+    if is_fake:
+         max_s, min_s = max(180 - level*15, 60), max(70 - level*5, 40)
+    else:
+         max_s, min_s = max(150 - level*20, 30), min(max(50 - level*10, 15), max(150 - level*20, 30))
+    
+    w, h = random.randint(min_s, max_s), random.randint(min_s, max_s)
+    return (random.randint(50, 1024-w-50), random.randint(50, 1024-h-50), w, h) # returning x,y,w,h temporarily for easier overlap check
 
-def generate_fake_glitch_box(level=0):
-    max_size, min_size = max(180 - level * 15, 60), max(70 - level * 5, 40) 
-    w, h = random.randint(min_size, max_size), random.randint(min_size, max_size)
-    return (random.randint(50, 1024-w-50), random.randint(50, 1024-h-50), random.randint(50, 1024-w-50)+w, random.randint(50, 1024-h-50)+h)
+def check_overlap(box1, box2, buffer=20):
+    # box = (x, y, w, h)
+    b1_x1, b1_y1, b1_x2, b1_y2 = box1[0], box1[1], box1[0]+box1[2], box1[1]+box1[3]
+    b2_x1, b2_y1, b2_x2, b2_y2 = box2[0], box2[1], box2[0]+box2[2], box2[1]+box2[3]
+    # Standard AABB overlap check with buffer
+    if (b1_x2 + buffer < b2_x1) or (b2_x2 + buffer < b1_x1) or (b1_y2 + buffer < b2_y1) or (b2_y2 + buffer < b1_y1):
+        return False
+    return True
+
+def move_glitch(num_real=1):
+    lvl = st.session_state.current_level
+    st.session_state.glitch_seed = random.randint(1, 100000)
+    
+    # 1. Generate REAL boxes first
+    real_boxes_temp = []
+    for _ in range(num_real):
+        while True:
+            new_box = get_random_box(lvl, is_fake=False)
+            if not any(check_overlap(new_box, b) for b in real_boxes_temp):
+                real_boxes_temp.append(new_box)
+                break
+    
+    # 2. Generate FAKE boxes, ensuring no overlap with ANY existing box
+    num_fakes = lvl + 1
+    fake_boxes_temp = []
+    for _ in range(num_fakes):
+        attempts = 0
+        while attempts < 50: # Prevent infinite loops if screen is full
+            new_box = get_random_box(lvl, is_fake=True)
+            # Check against ALL real boxes AND ALL already generated fake boxes
+            if not any(check_overlap(new_box, b) for b in real_boxes_temp + fake_boxes_temp):
+                fake_boxes_temp.append(new_box)
+                break
+            attempts += 1
+
+    # Convert back to (x1, y1, x2, y2) format for the rest of the app
+    st.session_state.real_boxes = [(x, y, x+w, y+h) for x,y,w,h in real_boxes_temp]
+    st.session_state.fake_boxes = [(x, y, x+w, y+h) for x,y,w,h in fake_boxes_temp]
+    st.session_state.last_move_time = time.time()
 
 def generate_mutating_frame(base_img, boxes, is_fake=False):
     frame = base_img.copy()
@@ -90,33 +144,29 @@ def generate_mutating_frame(base_img, boxes, is_fake=False):
     return frame
 
 @st.cache_data(show_spinner=False, persist="disk")
-def generate_scaled_gif(img_path, original_boxes, target_width, level_idx, glitch_seed):
+def generate_scaled_gif(img_path, real_boxes_orig, fake_boxes_orig, target_width, level_idx, glitch_seed):
     try:
         random.seed(glitch_seed)
         base_img = Image.open(img_path).convert("RGB")
         sf = target_width / base_img.width
         base_img = base_img.resize((target_width, int(base_img.height * sf)), Image.Resampling.LANCZOS)
-        scaled_real = [(int(x1*sf), int(y1*sf), int(x2*sf), int(y2*sf)) for x1,y1,x2,y2 in original_boxes]
-        scaled_fake = [(int(x1*sf), int(y1*sf), int(x2*sf), int(y2*sf)) for x1,y1,x2,y2 in [generate_fake_glitch_box(level_idx) for _ in range(level_idx+1)]]
+        
+        # Scale pre-calculated non-overlapping boxes
+        scaled_real = [(int(x1*sf), int(y1*sf), int(x2*sf), int(y2*sf)) for x1,y1,x2,y2 in real_boxes_orig]
+        scaled_fake = [(int(x1*sf), int(y1*sf), int(x2*sf), int(y2*sf)) for x1,y1,x2,y2 in fake_boxes_orig]
+
         frames = [base_img.copy() for _ in range(15)]
         for _ in range(8):
-            frames.append(generate_mutating_frame(generate_mutating_frame(base_img, original_boxes, False), scaled_fake, True))
+            # Apply both real and fake mutations to the same frame
+            mf = generate_mutating_frame(base_img, real_boxes_orig, False)
+            frames.append(generate_mutating_frame(mf, fake_boxes_orig, True))
+            
         temp_file = f"/tmp/lvl_{level_idx}_{glitch_seed}.gif"
         frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15+[70]*8, loop=0)
         return temp_file, scaled_real, scaled_fake
     except: return None, [], []
 
 def validate_usn(usn): return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
-
-def get_num_real_targets(level_idx):
-    if level_idx in [2, 3]: return 2 
-    return 1
-
-def move_glitch(num_glitches=1):
-    lvl = st.session_state.current_level
-    st.session_state.glitch_seed = random.randint(1, 100000)
-    st.session_state.current_boxes = [get_new_glitch_box(level=lvl) for _ in range(num_glitches)]
-    st.session_state.last_move_time = time.time()
 
 # --- GOOGLE SHEETS ---
 conn = None
@@ -132,13 +182,12 @@ def save_score(tag, name, usn, time_val):
 def get_leaderboard():
     if conn:
         try:
-            df = conn.read(worksheet="Scores", ttl=0)
+            df = conn.read(worksheet="Scores", ttl=0, dtype=str) # Nuclear read
             df.columns = df.columns.str.strip()
-            req = ['Tag', 'Name', 'USN', 'Time']
-            if not all(c in df.columns for c in req): return pd.DataFrame(columns=["Rank"]+req)
+            if not all(c in df.columns for c in ['Tag', 'Name', 'USN', 'Time']): return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
             df['Time'] = pd.to_numeric(df['Time'].astype(str).str.replace(',', ''), errors='coerce')
-            df.dropna(subset=['Time', 'USN', 'Tag'], inplace=True)
-            if df.empty: return pd.DataFrame(columns=["Rank"]+req)
+            df.dropna(subset=['Time', 'USN'], inplace=True)
+            if df.empty: return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
             df.sort_values(by='Time', ascending=True, inplace=True)
             df['Rank'] = range(1, len(df) + 1)
             df['Time'] = df['Time'].apply(lambda x: f"{x:.2f}s")
@@ -146,10 +195,12 @@ def get_leaderboard():
         except Exception: pass
     return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
 
-# --- MAIN EXECUTION START ---
+# --- MAIN INIT ---
 inject_css()
+def get_num_real_targets(level_idx): return 2 if level_idx in [2, 3] else 1
+
 if 'game_state' not in st.session_state:
-    st.session_state.update({'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'player_name': '', 'player_usn': '', 'final_time': 0.0, 'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000), 'current_boxes': [get_new_glitch_box()], 'hits': 0})
+    st.session_state.update({'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'player_name': '', 'player_usn': '', 'final_time': 0.0, 'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000), 'real_boxes': [], 'fake_boxes': [], 'hits': 0})
 
 st.title("DETROIT: ANOMALY [09]")
 
@@ -163,12 +214,20 @@ if st.session_state.game_state == "menu":
         st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'player_name': name, 'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
         move_glitch(get_num_real_targets(0)); st.rerun()
         
+    with st.expander("CREDITS // SYSTEM INFO"):
+        st.markdown("""
+        **DETROIT: ANOMALY [09]**
+        * **Lead Developer:** Shaik Imran
+        * **System Version:** v4.0.2 (STABLE)
+        * **Club:** DeepStation AI
+        """)
+
     st.markdown("---")
     st.markdown("### GLOBAL RANKINGS")
     lb = get_leaderboard()
-    if not lb.empty: st.dataframe(lb, hide_index=True, use_container_width=True)
-    elif conn: st.warning("Connection OK, waiting for data.")
-    else: st.error("Connection Failed.")
+    if conn and not lb.empty: st.dataframe(lb, hide_index=True, use_container_width=True)
+    elif conn: st.warning("WAITING FOR DATA LINK...")
+    else: st.error("CONNECTION SEVERED.")
 
 elif st.session_state.game_state == "playing":
     lvl = st.session_state.current_level
@@ -177,13 +236,13 @@ elif st.session_state.game_state == "playing":
     c1.markdown(f"**AGENT: {st.session_state.player_tag}**"); c2.markdown(f"**TIME: {time.time()-st.session_state.start_time:.1f}s**"); c3.markdown(f"**LVL: {lvl+1}/4**")
     st.progress(st.session_state.hits/needed, text=f"Neutralized: {st.session_state.hits}/{needed}")
     
-    gif, real, fake = generate_scaled_gif(LEVEL_FILES[lvl], st.session_state.current_boxes, GAME_WIDTH, lvl, st.session_state.glitch_seed)
-    if gif and real:
+    gif, scaled_real, scaled_fake = generate_scaled_gif(LEVEL_FILES[lvl], st.session_state.real_boxes, st.session_state.fake_boxes, GAME_WIDTH, lvl, st.session_state.glitch_seed)
+    if gif:
         coords = streamlit_image_coordinates(gif, key=f"lvl_{lvl}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
         if coords:
             cx, cy = coords['x'], coords['y']
-            hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in real)
-            fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in fake)
+            hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_real)
+            fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_fake)
             if hit:
                 trigger_static_transition(); st.session_state.hits += 1
                 if st.session_state.hits >= needed:
