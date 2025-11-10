@@ -12,8 +12,8 @@ import re
 # --- CONFIGURATION ---
 st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
 
-GAME_WIDTH = 700    # Standard width, usually works okay on mobile landscape
-HIT_TOLERANCE = 60  # Adjusted for balanced difficulty on touch screens
+GAME_WIDTH = 700
+HIT_TOLERANCE = 100 
 
 LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png", "assets/level4.png"]
 GLITCHES_PER_LEVEL = [3, 5, 7, 7] 
@@ -24,34 +24,56 @@ def get_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- CSS: ULTRA GLITCH AESTHETIC ---
+# --- CSS: ULTRA GLITCH + FORCE DESKTOP + MOBILE FIX ---
 def inject_css():
+    # 1. FORCE STATIC OVERLAY (Explicit HTML is more reliable on mobile than pseudo-elements)
+    st.markdown("""
+        <div id="static-overlay"></div>
+    """, unsafe_allow_html=True)
+
     st.markdown("""
         <style>
             /* BASE THEME */
             .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
             #MainMenu, footer, header {visibility: hidden;}
-            
-            /* ANIMATED GLITCH BACKGROUND */
-            .stApp::after {
-                content: " "; display: block; position: fixed; top: 0; left: 0; bottom: 0; right: 0;
-                background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-                z-index: 99999; background-size: 100% 3px, 3px 100%; pointer-events: none; opacity: 0.15;
-                animation: bg-jitter 0.2s infinite;
+
+            /* FORCE SCROLLABLE CONTAINER FOR MOBILE */
+            .block-container {
+                min-width: 720px !important;
+                max-width: 900px !important;
+                overflow-x: auto !important;
             }
-            @keyframes bg-jitter {
-                0% { background-position: 0 0; opacity: 0.15; }
-                25% { background-position: -5px 2px; opacity: 0.18; }
-                50% { background-position: 2px -3px; opacity: 0.15; }
-                75% { background-position: 3px 1px; opacity: 0.13; }
-                100% { background-position: 0 0; opacity: 0.15; }
+            
+            /* NEW HARDWARE-ACCELERATED STATIC OVERLAY */
+            #static-overlay {
+                position: fixed;
+                top: -50%; left: -50%; width: 200%; height: 200%;
+                background: repeating-linear-gradient(transparent 0px, rgba(0, 0, 0, 0.25) 50%, transparent 100%),
+                            repeating-linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+                background-size: 100% 3px, 3px 100%;
+                z-index: 99999;
+                pointer-events: none;
+                opacity: 0.2;
+                animation: gpu-jitter 0.3s infinite linear alternate-reverse;
+                mix-blend-mode: hard-light;
             }
 
-            /* GLOBAL TEXT GLITCH */
-            /* Targets generic Streamlit classes to hit almost everything */
-            .stMarkdown, .stText, .stTitle, .stHeader, .stSubheader, button, label, input, .stDataFrame {
-                animation: glitch-text 500ms infinite;
+            /* GPU-Optimized Animation for Mobile */
+            @keyframes gpu-jitter {
+                0% { transform: translate3d(0,0,0); opacity: 0.15; }
+                25% { transform: translate3d(-5px, -5px, 0); opacity: 0.2; }
+                50% { transform: translate3d(5px, 5px, 0); opacity: 0.15; }
+                75% { transform: translate3d(-5px, 5px, 0); opacity: 0.25; }
+                100% { transform: translate3d(0,0,0); opacity: 0.15; }
             }
+
+            /* AGGRESSIVE GLOBAL TEXT GLITCH */
+            h1, h2, h3, h4, h5, h6, p, label, span, div, button, a, input, .stDataFrame, .stMarkdown, .stExpander {
+                animation: glitch-text 500ms infinite !important;
+                color: #d0d0d0 !important;
+            }
+            img, #static-overlay { animation: none !important; } /* Protect images and overlay from double glitching */
+            #static-overlay { animation: gpu-jitter 0.3s infinite linear alternate-reverse !important; } /* Re-apply correct animation to overlay */
 
             @keyframes glitch-text {
                 0% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
@@ -76,54 +98,35 @@ def trigger_static_transition():
         time.sleep(0.4)
     placeholder.empty()
 
-# --- GLITCH GENERATION WITH NO OVERLAP ---
+# --- GLITCH GENERATION WITH ANTI-OVERLAP ---
 def get_random_box(level, is_fake=False):
-    if is_fake:
-         max_s, min_s = max(180 - level*15, 60), max(70 - level*5, 40)
-    else:
-         max_s, min_s = max(150 - level*20, 30), min(max(50 - level*10, 15), max(150 - level*20, 30))
-    
+    if is_fake: max_s, min_s = max(180 - level*15, 60), max(70 - level*5, 40)
+    else: max_s, min_s = max(150 - level*20, 30), min(max(50 - level*10, 15), max(150 - level*20, 30))
     w, h = random.randint(min_s, max_s), random.randint(min_s, max_s)
-    return (random.randint(50, 1024-w-50), random.randint(50, 1024-h-50), w, h) # returning x,y,w,h temporarily for easier overlap check
+    return (random.randint(50, 1024-w-50), random.randint(50, 1024-h-50), w, h)
 
 def check_overlap(box1, box2, buffer=20):
-    # box = (x, y, w, h)
     b1_x1, b1_y1, b1_x2, b1_y2 = box1[0], box1[1], box1[0]+box1[2], box1[1]+box1[3]
     b2_x1, b2_y1, b2_x2, b2_y2 = box2[0], box2[1], box2[0]+box2[2], box2[1]+box2[3]
-    # Standard AABB overlap check with buffer
-    if (b1_x2 + buffer < b2_x1) or (b2_x2 + buffer < b1_x1) or (b1_y2 + buffer < b2_y1) or (b2_y2 + buffer < b1_y1):
-        return False
+    if (b1_x2 + buffer < b2_x1) or (b2_x2 + buffer < b1_x1) or (b1_y2 + buffer < b2_y1) or (b2_y2 + buffer < b1_y1): return False
     return True
 
 def move_glitch(num_real=1):
     lvl = st.session_state.current_level
     st.session_state.glitch_seed = random.randint(1, 100000)
-    
-    # 1. Generate REAL boxes first
-    real_boxes_temp = []
+    real_temp, fake_temp = [], []
     for _ in range(num_real):
         while True:
-            new_box = get_random_box(lvl, is_fake=False)
-            if not any(check_overlap(new_box, b) for b in real_boxes_temp):
-                real_boxes_temp.append(new_box)
-                break
-    
-    # 2. Generate FAKE boxes, ensuring no overlap with ANY existing box
-    num_fakes = lvl + 1
-    fake_boxes_temp = []
-    for _ in range(num_fakes):
-        attempts = 0
-        while attempts < 50: # Prevent infinite loops if screen is full
-            new_box = get_random_box(lvl, is_fake=True)
-            # Check against ALL real boxes AND ALL already generated fake boxes
-            if not any(check_overlap(new_box, b) for b in real_boxes_temp + fake_boxes_temp):
-                fake_boxes_temp.append(new_box)
-                break
-            attempts += 1
-
-    # Convert back to (x1, y1, x2, y2) format for the rest of the app
-    st.session_state.real_boxes = [(x, y, x+w, y+h) for x,y,w,h in real_boxes_temp]
-    st.session_state.fake_boxes = [(x, y, x+w, y+h) for x,y,w,h in fake_boxes_temp]
+            nb = get_random_box(lvl, False)
+            if not any(check_overlap(nb, b) for b in real_temp): real_temp.append(nb); break
+    for _ in range(lvl + 1):
+        at = 0
+        while at < 50:
+            nb = get_random_box(lvl, True)
+            if not any(check_overlap(nb, b) for b in real_temp + fake_temp): fake_temp.append(nb); break
+            at += 1
+    st.session_state.real_boxes = [(x,y,x+w,y+h) for x,y,w,h in real_temp]
+    st.session_state.fake_boxes = [(x,y,x+w,y+h) for x,y,w,h in fake_temp]
     st.session_state.last_move_time = time.time()
 
 def generate_mutating_frame(base_img, boxes, is_fake=False):
@@ -150,17 +153,11 @@ def generate_scaled_gif(img_path, real_boxes_orig, fake_boxes_orig, target_width
         base_img = Image.open(img_path).convert("RGB")
         sf = target_width / base_img.width
         base_img = base_img.resize((target_width, int(base_img.height * sf)), Image.Resampling.LANCZOS)
-        
-        # Scale pre-calculated non-overlapping boxes
         scaled_real = [(int(x1*sf), int(y1*sf), int(x2*sf), int(y2*sf)) for x1,y1,x2,y2 in real_boxes_orig]
         scaled_fake = [(int(x1*sf), int(y1*sf), int(x2*sf), int(y2*sf)) for x1,y1,x2,y2 in fake_boxes_orig]
-
         frames = [base_img.copy() for _ in range(15)]
         for _ in range(8):
-            # Apply both real and fake mutations to the same frame
-            mf = generate_mutating_frame(base_img, real_boxes_orig, False)
-            frames.append(generate_mutating_frame(mf, fake_boxes_orig, True))
-            
+            frames.append(generate_mutating_frame(generate_mutating_frame(base_img, real_boxes_orig, False), fake_boxes_orig, True))
         temp_file = f"/tmp/lvl_{level_idx}_{glitch_seed}.gif"
         frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15+[70]*8, loop=0)
         return temp_file, scaled_real, scaled_fake
@@ -182,7 +179,7 @@ def save_score(tag, name, usn, time_val):
 def get_leaderboard():
     if conn:
         try:
-            df = conn.read(worksheet="Scores", ttl=0, dtype=str) # Nuclear read
+            df = conn.read(worksheet="Scores", ttl=0, dtype=str)
             df.columns = df.columns.str.strip()
             if not all(c in df.columns for c in ['Tag', 'Name', 'USN', 'Time']): return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
             df['Time'] = pd.to_numeric(df['Time'].astype(str).str.replace(',', ''), errors='coerce')
@@ -215,12 +212,7 @@ if st.session_state.game_state == "menu":
         move_glitch(get_num_real_targets(0)); st.rerun()
         
     with st.expander("CREDITS // SYSTEM INFO"):
-        st.markdown("""
-        **DETROIT: ANOMALY [09]**
-        * **Lead Developer:** Shaik Imran
-        * **System Version:** v4.0.2 (STABLE)
-        * **Club:** DeepStation AI
-        """)
+        st.markdown("**DETROIT: ANOMALY [09]**\n* **Lead Developer:** Shaik Imran\n* **Club:** DeepStation AI MSRIT")
 
     st.markdown("---")
     st.markdown("### GLOBAL RANKINGS")
