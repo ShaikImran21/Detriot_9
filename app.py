@@ -10,7 +10,7 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 import re 
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 700
 HIT_TOLERANCE = 100
@@ -18,13 +18,13 @@ HIT_TOLERANCE = 100
 LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png", "assets/level4.png"]
 GLITCHES_PER_LEVEL = [3, 5, 7, 7] 
 
-# --- HELPER: ASSETS ---
+# --- ALL HELPER FUNCTIONS DEFINED FIRST ---
+
 def get_base64(bin_file):
     try:
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- CSS: RETRO AESTHETIC ---
 def inject_css():
     st.markdown("""
         <style>
@@ -60,7 +60,6 @@ def trigger_static_transition():
         time.sleep(0.4)
     placeholder.empty()
 
-# --- GLITCH GENERATION ---
 def get_new_glitch_box(level=0):
     max_size = max(150 - level * 20, 30) 
     min_size = max(50 - level * 10, 15) 
@@ -109,6 +108,16 @@ def generate_scaled_gif(img_path, original_boxes, target_width, level_idx, glitc
 
 def validate_usn(usn): return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
 
+def get_num_real_targets(level_idx):
+    if level_idx in [2, 3]: return 2 
+    return 1
+
+def move_glitch(num_glitches=1):
+    lvl = st.session_state.current_level
+    st.session_state.glitch_seed = random.randint(1, 100000)
+    st.session_state.current_boxes = [get_new_glitch_box(level=lvl) for _ in range(num_glitches)]
+    st.session_state.last_move_time = time.time()
+
 # --- GOOGLE SHEETS ---
 conn = None
 try: conn = st.connection("gsheets", type=GSheetsConnection)
@@ -120,39 +129,24 @@ def save_score(tag, name, usn, time_val):
         except: return False
     return False
 
-def get_leaderboard(debug_mode=False):
-    """NUCLEAR READ MODE with Debug Option"""
+def get_leaderboard():
     if conn:
         try:
-            # 1. Raw read of everything
             df = conn.read(worksheet="Scores", ttl=0)
-            if debug_mode: return df # Return RAW data for debugging
-
-            # 2. Clean headers (remove hidden spaces)
             df.columns = df.columns.str.strip()
-            
-            # 3. Check for required columns
             req = ['Tag', 'Name', 'USN', 'Time']
             if not all(c in df.columns for c in req): return pd.DataFrame(columns=["Rank"]+req)
-
-            # 4. Aggressive data cleaning
-            # Convert to string first to handle strange Excel formats, then replace commas, then to numeric
             df['Time'] = pd.to_numeric(df['Time'].astype(str).str.replace(',', ''), errors='coerce')
             df.dropna(subset=['Time', 'USN', 'Tag'], inplace=True)
-
             if df.empty: return pd.DataFrame(columns=["Rank"]+req)
-
-            # 5. Final Format
             df.sort_values(by='Time', ascending=True, inplace=True)
             df['Rank'] = range(1, len(df) + 1)
             df['Time'] = df['Time'].apply(lambda x: f"{x:.2f}s")
             return df[['Rank', 'Name', 'USN', 'Time']].head(10).reset_index(drop=True)
-        except Exception as e:
-             if debug_mode: return pd.DataFrame({"Error": [str(e)]})
-             pass
+        except Exception: pass
     return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
 
-# --- MAIN ---
+# --- MAIN EXECUTION START ---
 inject_css()
 if 'game_state' not in st.session_state:
     st.session_state.update({'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'player_name': '', 'player_usn': '', 'final_time': 0.0, 'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000), 'current_boxes': [get_new_glitch_box()], 'hits': 0})
@@ -164,6 +158,7 @@ if st.session_state.game_state == "menu":
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
     name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
     usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
+    
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn))):
         st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'player_name': name, 'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
         move_glitch(get_num_real_targets(0)); st.rerun()
@@ -171,20 +166,13 @@ if st.session_state.game_state == "menu":
     st.markdown("---")
     st.markdown("### GLOBAL RANKINGS")
     lb = get_leaderboard()
-    if conn and not lb.empty:
-        st.dataframe(lb, hide_index=True, use_container_width=True)
-    elif conn and lb.empty:
-         st.warning("⚠️ Connection OK, but no valid data found.")
-         with st.expander("🔍 VIEW DEBUG INFO (Click if Leaderboard is missing)"):
-             st.write("Raw Data from Sheet:")
-             st.dataframe(get_leaderboard(debug_mode=True))
-             st.info("If you see your data above but not in the main leaderboard, check column names for spaces!")
-    else:
-        st.error("❌ Connection Failed.")
+    if not lb.empty: st.dataframe(lb, hide_index=True, use_container_width=True)
+    elif conn: st.warning("Connection OK, waiting for data.")
+    else: st.error("Connection Failed.")
 
 elif st.session_state.game_state == "playing":
     lvl = st.session_state.current_level
-    needed, targets = GLITCHES_PER_LEVEL[lvl], (2 if lvl in [2,3] else 1)
+    needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
     c1, c2, c3 = st.columns(3)
     c1.markdown(f"**AGENT: {st.session_state.player_tag}**"); c2.markdown(f"**TIME: {time.time()-st.session_state.start_time:.1f}s**"); c3.markdown(f"**LVL: {lvl+1}/4**")
     st.progress(st.session_state.hits/needed, text=f"Neutralized: {st.session_state.hits}/{needed}")
@@ -199,7 +187,7 @@ elif st.session_state.game_state == "playing":
             if hit:
                 trigger_static_transition(); st.session_state.hits += 1
                 if st.session_state.hits >= needed:
-                     if lvl < 3: st.session_state.current_level += 1; st.session_state.hits = 0; move_glitch((2 if st.session_state.current_level in [2,3] else 1))
+                     if lvl < 3: st.session_state.current_level += 1; st.session_state.hits = 0; move_glitch(get_num_real_targets(st.session_state.current_level))
                      else: st.session_state.final_time = time.time() - st.session_state.start_time; st.session_state.game_state = 'game_over'
                 else: move_glitch(targets)
                 st.rerun()
