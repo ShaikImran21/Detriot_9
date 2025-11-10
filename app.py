@@ -10,14 +10,12 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 import re 
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="DETROIT: Anomaly [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 700
 HIT_TOLERANCE = 100
 
-# 4 Levels
 LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png", "assets/level4.png"]
-# 22 Glitches Total
 GLITCHES_PER_LEVEL = [3, 5, 7, 7] 
 
 # --- HELPER: ASSETS ---
@@ -123,26 +121,30 @@ def save_score(tag, name, usn, time_val):
     return False
 
 def get_leaderboard():
-    """MOST PERMISSIVE READ MODE: Reads raw data and cleans it in Python."""
+    """NUCLEAR READ MODE: Forces everything to string first to bypass TypeErrors."""
     if conn:
         try:
-            # Read without forcing types first to avoid instant failure
-            df = conn.read(worksheet="Scores", ttl=0)
-            # Basic cleanup: ensure columns exist
-            req_cols = ['Tag', 'Name', 'USN', 'Time']
-            if not all(col in df.columns for col in req_cols): return pd.DataFrame(columns=["Rank"] + req_cols)
-            # Convert Time safely
+            # 1. Read EVERYTHING as a string first. safest way possible.
+            df = conn.read(worksheet="Scores", ttl=0, dtype=str)
+            
+            # 2. Ensure required columns exist
+            req = ['Tag', 'Name', 'USN', 'Time']
+            if not all(c in df.columns for c in req): return pd.DataFrame(columns=["Rank"]+req)
+
+            # 3. Manually convert Time to numeric, forcing errors to NaN
             df['Time'] = pd.to_numeric(df['Time'], errors='coerce')
-            df = df.dropna(subset=['Time', 'USN'])
-            if df.empty: return pd.DataFrame(columns=["Rank"] + req_cols)
+            
+            # 4. Drop rows where Time became NaN (invalid data)
+            df.dropna(subset=['Time', 'USN'], inplace=True)
+
+            if df.empty: return pd.DataFrame(columns=["Rank"]+req)
+
+            # 5. Sort and format
             df.sort_values(by='Time', ascending=True, inplace=True)
             df['Rank'] = range(1, len(df) + 1)
             df['Time'] = df['Time'].apply(lambda x: f"{x:.2f}s")
             return df[['Rank', 'Name', 'USN', 'Time']].head(10).reset_index(drop=True)
-        except Exception as e: 
-             # UNCOMMENT NEXT LINE TO SEE RAW ERROR ON SCREEN IF IT STILL FAILS
-             # st.error(f"DEBUG ERROR: {e}")
-             pass
+        except Exception: pass
     return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
 
 # --- MAIN ---
