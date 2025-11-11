@@ -12,9 +12,9 @@ import gspread
 from google.oauth2.service_account import Credentials # <-- ADDED IMPORT
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="wide", initial_sidebar_state="collapsed")
 
-GAME_WIDTH = 1000
+GAME_WIDTH = 1200
 # MAXIMUM TOLERANCE: Very easy to hit now, perfect for all mobile users.
 HIT_TOLERANCE = 150 
 
@@ -80,8 +80,7 @@ def inject_css(video_file_path): # <-- MODIFIED: Pass in the video path
 
             /* FORCE HORIZONTAL SCROLL ON MOBILE (Prevents squishing) */
             .block-container {{
-                min-width: 720px !important;
-                max-width: 1060px !important;
+                
                 overflow-x: auto !important;
             }}
             
