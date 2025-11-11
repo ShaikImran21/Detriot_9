@@ -67,8 +67,62 @@ def inject_css():
                 0%, 100% { transform: translate3d(0,0,0); opacity: 0.15; }
                 25% { transform: translate3d(-5px, -5px, 0); opacity: 0.2; }
                 50% { transform: translate3d(5px, 5px, 0); opacity: 0.15; }
-                75% { transform: translate3d(-5px, 5px, 0); opacity: 0.25; }
-            }
+                /* ... (end of @keyframes gpu-jitter) ... */
+              75% { transform: translate3d(-5px, 5px, 0); opacity: 0.25; }
+          }
+          
+          /* --- START: Glitchy Title Background --- */
+          h1 {
+              position: relative !important;
+              z-index: 1;
+              /* Add some padding to see the background better */
+              padding: 10px 5px; 
+          }
+
+          h1::before {
+              content: '';
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              background: #f00; /* Start red */
+              z-index: -1; /* Behind the text */
+              opacity: 0.3;
+              animation: glitch-bg-block 150ms infinite linear;
+          }
+
+          @keyframes glitch-bg-block {
+              0% {
+                  transform: translate(3px, -3px);
+                  background: #f00; /* Red */
+                  opacity: 0.3;
+              }
+              25% {
+                  transform: translate(-3px, 3px);
+                  background: #0ff; /* Cyan */
+                  opacity: 0.4;
+              }
+              50% {
+                  transform: translate(3px, 3px);
+                  background: #f0f; /* Magenta */
+                  opacity: 0.2;
+              }
+              75% {
+                  transform: translate(-3px, -3px);
+                  background: #0f0; /* Green */
+                  opacity: 0.5;
+              }
+              100% {
+                  transform: translate(3px, -3px);
+                  background: #f00; /* Red */
+                  opacity: 0.3;
+              }
+          }
+          /* --- END: Glitchy Title Background --- */
+
+        
+            
 
             /* GLOBAL TEXT GLITCH */
             h1, h2, h3, h4, h5, h6, p, label, span, div, button, a, input, .stDataFrame, .stMarkdown, .stExpander {
