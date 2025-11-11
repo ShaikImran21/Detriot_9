@@ -18,14 +18,17 @@ GAME_WIDTH = 700
 # MAXIMUM TOLERANCE: Very easy to hit now, perfect for all mobile users.
 HIT_TOLERANCE = 150 
 
-LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png"] # <-- MODIFIED
-GLITCHES_PER_LEVEL = [3, 5, 7] # <-- MODIFIED
+LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png"]
+GLITCHES_PER_LEVEL = [3, 5, 7]
+VIDEO_FILE = "167784-837438543.mp4" # <-- ADDED: Your video file name
 
 # --- HELPER: ASSETS ---
 def get_base64(bin_file):
     try:
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
-    except: return None
+    except Exception as e:
+        print(f"Error reading {bin_file}: {e}")
+        return None
 
 # --- CSS: ULTRA GLITCH + MOBILE FIX ---
 def inject_css():
@@ -34,18 +37,36 @@ def inject_css():
 
     st.markdown("""
         <style>
+            /* --- START: VIDEO BACKGROUND --- */
+            #bg-video {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                min-width: 100%;
+                min-height: 100%;
+                width: auto;
+                height: auto;
+                z-index: -10; /* Behind all content */
+                transform: translateX(-50%) translateY(-50%);
+                opacity: 0.3; /* Make it subtle */
+                object-fit: cover;
+            }
+            /* --- END: VIDEO BACKGROUND --- */
+
             /* BASE THEME */
             .stApp { 
-                /* OLD: background-color: #080808; */
-                /* NEW ANIMATED BACKGROUND */
-                /* background-image: url('https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdGZ2Y2dyYnhjZDY5ejd6czV4aG5qNTB6b2dndXpybWp5cDRpeDAYdyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/j5oESCsB3sY34iGOMp/giphy.gif'); */ /* REMOVED GLITCHY BACKGROUND GIF */
-                background-color: #080808; /* Solid dark background */
+                /* background-color: #080808; */ /* REPLACED with transparent */
+                background-color: transparent; 
                 background-size: cover;
                 background-repeat: no-repeat;
                 background-attachment: fixed;
                 background-position: center;
                 color: #d0d0d0; 
                 font-family: 'Courier New', monospace; 
+                
+                /* Ensure content sits on top of video */
+                position: relative;
+                z-index: 1;
             }
             #MainMenu, footer, header {visibility: hidden;}
 
@@ -61,14 +82,16 @@ def inject_css():
                 position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
                 background: repeating-linear-gradient(transparent 0px, rgba(0, 0, 0, 0.25) 50%, transparent 100%),
                             repeating-linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-                background-size: 100% 3px, 3px 100%; z-index: 99999; pointer-events: none; opacity: 0.2;
-                animation: gpu-jitter 0.3s infinite linear alternate-reverse; mix-blend-mode: hard-light;
+                background-size: 100% 3px, 3px 100%; 
+                z-index: 99999; /* On top of everything */
+                pointer-events: none; opacity: 0.2;
+                animation: gpu-jitter 0.3s infinite linear alternate-reverse; 
+                mix-blend-mode: hard-light;
             }
             @keyframes gpu-jitter {
                 0%, 100% { transform: translate3d(0,0,0); opacity: 0.15; }
                 25% { transform: translate3d(-5px, -5px, 0); opacity: 0.2; }
                 50% { transform: translate3d(5px, 5px, 0); opacity: 0.15; }
-                /* ... (end of @keyframes gpu-jitter) ... */
               75% { transform: translate3d(-5px, 5px, 0); opacity: 0.25; }
             }
            
@@ -76,57 +99,12 @@ def inject_css():
             h1 {
                 position: relative !important;
                 z-index: 1;
-                /* Add some padding to see the background better */
                 padding: 10px 5px; 
             }
 
             /* REMOVED GLITCHY TITLE BACKGROUND */
-            /*
-            h1::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: #f00; 
-                z-index: -1; 
-                opacity: 0.3;
-                animation: glitch-bg-block 150ms infinite linear;
-            }
-
-            @keyframes glitch-bg-block {
-                0% {
-                    transform: translate(3px, -3px);
-                    background: #f00; 
-                    opacity: 0.3;
-                }
-                25% {
-                    transform: translate(-3px, 3px);
-                    background: #0ff; 
-                    opacity: 0.4;
-                }
-                50% {
-                    transform: translate(3px, 3px);
-                    background: #f0f; 
-                    opacity: 0.2;
-                }
-                75% {
-                    transform: translate(-3px, -3px);
-                    background: #0f0; 
-                    opacity: 0.5;
-                }
-                100% {
-                    transform: translate(3px, -3px);
-                    background: #f00; 
-                    opacity: 0.3;
-                }
-            }
-            */
+            /* ... (CSS for h1::before and @keyframes glitch-bg-block is removed) ... */
             /* --- END: Glitchy Title Background --- */
-
-           
-           
 
             /* GLOBAL TEXT GLITCH */
             h1, h2, h3, h4, h5, h6, p, label, span, div, button, a, input, .stDataFrame, .stMarkdown, .stExpander {
@@ -231,27 +209,15 @@ try: conn = st.connection("gsheets", type=GSheetsConnection)
 except: pass
 
 def save_score(tag, name, usn, time_val):
-    # We can't use the 'conn' object for writing, as it's unreliable.
-    # We will build a new, direct gspread connection for writing.
     try:
-        # --- FINAL, ROBUST FIX ---
-        # Use gspread directly, bypassing the st.connection object for writes.
-       
-        # 1. Define scopes and get credentials from Streamlit secrets
         scopes = [
             "https://spreadsheets.google.com/feeds",
             "https://www.googleapis.com/auth/drive"
         ]
-       
-        # st.connection automatically looks in "connections.gsheets", so we do the same
-        # This assumes your secrets.toml has [connections.gsheets]
         creds_dict = st.secrets["connections"]["gsheets"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-       
-        # 2. Authorize gspread
         client = gspread.authorize(creds)
        
-        # 3. Open the spreadsheet by its ID (also from secrets)
         if "spreadsheet" not in creds_dict:
             st.error("GSheets Error: 'spreadsheet' (URL) not found in secrets.")
             return False
@@ -260,26 +226,21 @@ def save_score(tag, name, usn, time_val):
         sh = client.open_by_url(spreadsheet_url)
 
         try:
-            # 4. Try to get the worksheet
             worksheet = sh.worksheet("Scores")
         except gspread.exceptions.WorksheetNotFound:
-            # 5. If not found, create it and add headers
             print("Worksheet 'Scores' not found, creating it.")
             worksheet = sh.add_worksheet(title="Scores", rows=100, cols=4)
             worksheet.append_row(["Tag", "Name", "USN", "Time"])
             print("Worksheet 'Scores' created with headers.")
 
-        # 6. Append the new score data
         worksheet.append_row([
             str(tag), 
             str(name), 
             str(usn), 
-            str(f"{time_val:.2f}") # Format time as string
+            str(f"{time_val:.2f}")
         ])
-        # --- END NEW FIX ---
         return True
     except Exception as e:
-        # MODIFICATION: Print the actual error to the console and show it in Streamlit
         print(f"GSheets Write Error: {e}")
         st.error(f"GSheets Write Error: {e}")
         return False
@@ -302,7 +263,23 @@ def get_leaderboard():
 
 # --- MAIN INIT ---
 inject_css()
-def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1 # <-- MODIFIED
+
+# --- START: INJECT VIDEO BACKGROUND ---
+video_b64 = get_base64(VIDEO_FILE)
+if video_b64:
+    video_html = f"""
+    <video id="bg-video" autoplay loop muted>
+        <source src="data:video/mp4;base64,{video_b64}" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+    """
+    st.markdown(video_html, unsafe_allow_html=True)
+else:
+    st.warning(f"Could not load background video: {VIDEO_FILE}. Make sure it's in the correct folder.")
+# --- END: INJECT VIDEO BACKGROUND ---
+
+
+def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1
 
 if 'game_state' not in st.session_state:
     st.session_state.update({'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'player_name': '', 'player_usn': '', 'final_time': 0.0, 'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000), 'real_boxes': [], 'fake_boxes': [], 'hits': 0})
@@ -319,8 +296,6 @@ if st.session_state.game_state == "menu":
         st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'player_name': name, 'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
         move_glitch(get_num_real_targets(0)); st.rerun()
 
-    # --- TEST BUTTON REMOVED ---
-
     with st.expander("MISSION BRIEFING // RULES"):
         st.markdown("""
         *OBJECTIVE:* NEUTRALIZE ALL ACTIVE ANOMALIES IN MINIMUM TIME.
@@ -329,7 +304,7 @@ if st.session_state.game_state == "menu":
         2. *ENGAGE:* Tap precisely on the real anomaly.
         3. *ADVANCE:* Clear 3 Sectors.
         4. *CAUTION:* Sector 3 contains *MULTIPLE* simultaneous targets.
-        """, unsafe_allow_html=True) # <-- MODIFIED
+        """, unsafe_allow_html=True)
        
     with st.expander("CREDITS // SYSTEM INFO"):
         st.markdown("""
@@ -350,7 +325,7 @@ elif st.session_state.game_state == "playing":
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
     c1, c2, c3 = st.columns(3)
-    c1.markdown(f"*AGENT: {st.session_state.player_tag}"); c2.markdown(f"TIME: {time.time()-st.session_state.start_time:.1f}s"); c3.markdown(f"LVL: {lvl+1}/3*") # <-- MODIFIED
+    c1.markdown(f"*AGENT: {st.session_state.player_tag}"); c2.markdown(f"TIME: {time.time()-st.session_state.start_time:.1f}s"); c3.markdown(f"LVL: {lvl+1}/3*")
     st.progress(st.session_state.hits/needed, text=f"Neutralized: {st.session_state.hits}/{needed}")
    
     gif, scaled_real, scaled_fake = generate_scaled_gif(LEVEL_FILES[lvl], st.session_state.real_boxes, st.session_state.fake_boxes, GAME_WIDTH, lvl, st.session_state.glitch_seed)
@@ -363,7 +338,7 @@ elif st.session_state.game_state == "playing":
             if hit:
                 trigger_static_transition(); st.session_state.hits += 1
                 if st.session_state.hits >= needed:
-                    if lvl < 2: st.session_state.current_level += 1; st.session_state.hits = 0; move_glitch(get_num_real_targets(st.session_state.current_level)) # <-- MODIFIED
+                    if lvl < 2: st.session_state.current_level += 1; st.session_state.hits = 0; move_glitch(get_num_real_targets(st.session_state.current_level))
                     else: st.session_state.final_time = time.time() - st.session_state.start_time; st.session_state.game_state = 'game_over'
                 else: move_glitch(targets)
                 st.rerun()
