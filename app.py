@@ -28,122 +28,106 @@ def get_base64(bin_file):
     except: return None
 
 # --- CSS: ULTRA GLITCH + MOBILE FIX ---
-def inject_css():
-    # 1. FORCE STATIC OVERLAY (HTML for better mobile support)
-    st.markdown('<div id="static-overlay"></div>', unsafe_allow_html=True)
+def inject_css(video_file_path): # <-- MODIFIED: Pass in the video path
+    
+    # 1. ENCODE THE VIDEO FILE
+    video_base64 = get_base64(video_file_path)
+    
+    # 2. CREATE THE HTML <video> TAG
+    if video_base64:
+        video_html = f"""
+        <video id="video-bg" autoplay loop muted>
+            <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+        """
+        # Inject the video tag into the app
+        st.markdown(video_html, unsafe_allow_html=True)
 
-    st.markdown("""
+    # 3. CSS for the video + original CSS
+    st.markdown(f"""
         <style>
-            /* BASE THEME */
-            .stApp { 
-                /* OLD: background-color: #080808; */
-                /* NEW ANIMATED BACKGROUND */
-                /* background-image: url('https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdGZ2Y2dyYnhjZDY5ejd6czV4aG5qNTB6b2dndXpybWp5cDRpeDAYdyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/j5oESCsB3sY34iGOMp/giphy.gif'); / / REMOVED GLITCHY BACKGROUND GIF */
-                background-color: #080808; /* Solid dark background */
+            /* --- START: VIDEO BACKGROUND --- */
+            #video-bg {{
+                position: fixed;
+                right: 0;
+                bottom: 0;
+                min-width: 100%;
+                min-height: 100%;
+                width: auto;
+                height: auto;
+                z-index: -100; /* Puts it behind all content */
+                object-fit: cover; /* Fill the screen */
+                opacity: 0.4; /* Dim the video so text is readable */
+            }}
+            /* --- END: VIDEO BACKGROUND --- */
+
+            /* BASE THEME - MODIFIED for VIDEO */
+            .stApp {{ 
+                /* This is no longer a solid color.
+                It's a semi-transparent overlay to darken the video
+                and keep the text readable.
+                */
+                background-color: rgba(8, 8, 8, 0.75); /* 75% opaque dark */
                 background-size: cover;
                 background-repeat: no-repeat;
                 background-attachment: fixed;
                 background-position: center;
                 color: #d0d0d0; 
                 font-family: 'Courier New', monospace; 
-            }
-            #MainMenu, footer, header {visibility: hidden;}
+            }}
+            #MainMenu, footer, header {{visibility: hidden;}}
 
             /* FORCE HORIZONTAL SCROLL ON MOBILE (Prevents squishing) */
-            .block-container {
+            .block-container {{
                 min-width: 720px !important;
                 max-width: 900px !important;
                 overflow-x: auto !important;
-            }
-           
+            }}
+            
             /* HARDWARE-ACCELERATED STATIC OVERLAY */
-            #static-overlay {
+            #static-overlay {{
                 position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
                 background: repeating-linear-gradient(transparent 0px, rgba(0, 0, 0, 0.25) 50%, transparent 100%),
                             repeating-linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
                 background-size: 100% 3px, 3px 100%; z-index: 99999; pointer-events: none; opacity: 0.2;
                 animation: gpu-jitter 0.3s infinite linear alternate-reverse; mix-blend-mode: hard-light;
-            }
-            @keyframes gpu-jitter {
-                0%, 100% { transform: translate3d(0,0,0); opacity: 0.15; }
-                25% { transform: translate3d(-5px, -5px, 0); opacity: 0.2; }
-                50% { transform: translate3d(5px, 5px, 0); opacity: 0.15; }
+            }}
+            @keyframes gpu-jitter {{
+                0%, 100% {{ transform: translate3d(0,0,0); opacity: 0.15; }}
+                25% {{ transform: translate3d(-5px, -5px, 0); opacity: 0.2; }}
+                50% {{ transform: translate3d(5px, 5px, 0); opacity: 0.15; }}
                 /* ... (end of @keyframes gpu-jitter) ... */
-              75% { transform: translate3d(-5px, 5px, 0); opacity: 0.25; }
-            }
-           
+                75% {{ transform: translate3d(-5px, 5px, 0); opacity: 0.25; }}
+            }}
+            
             /* --- START: Glitchy Title Background --- */
-            h1 {
+            h1 {{
                 position: relative !important;
                 z-index: 1;
                 /* Add some padding to see the background better */
                 padding: 10px 5px; 
-            }
+            }}
 
             /* REMOVED GLITCHY TITLE BACKGROUND */
-            /*
-            h1::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: #f00; 
-                z-index: -1; 
-                opacity: 0.3;
-                animation: glitch-bg-block 150ms infinite linear;
-            }
-
-            @keyframes glitch-bg-block {
-                0% {
-                    transform: translate(3px, -3px);
-                    background: #f00; 
-                    opacity: 0.3;
-                }
-                25% {
-                    transform: translate(-3px, 3px);
-                    background: #0ff; 
-                    opacity: 0.4;
-                }
-                50% {
-                    transform: translate(3px, 3px);
-                    background: #f0f; 
-                    opacity: 0.2;
-                }
-                75% {
-                    transform: translate(-3px, -3px);
-                    background: #0f0; 
-                    opacity: 0.5;
-                }
-                100% {
-                    transform: translate(3px, -3px);
-                    background: #f00; 
-                    opacity: 0.3;
-                }
-            }
-            */
-            /* --- END: Glitchy Title Background --- */
-
-           
-           
-
+            /* ... (rest of your original h1::before CSS) ... */
+            
             /* GLOBAL TEXT GLITCH */
-            h1, h2, h3, h4, h5, h6, p, label, span, div, button, a, input, .stDataFrame, .stMarkdown, .stExpander {
+            h1, h2, h3, h4, h5, h6, p, label, span, div, button, a, input, .stDataFrame, .stMarkdown, .stExpander {{
                 animation: glitch-text 500ms infinite !important; color: #d0d0d0 !important;
-            }
-            img, #static-overlay { animation: none !important; }
-            #static-overlay { animation: gpu-jitter 0.3s infinite linear alternate-reverse !important; }
+            }}
+            img, #static-overlay {{ animation: none !important; }}
+            #static-overlay {{ animation: gpu-jitter 0.3s infinite linear alternate-reverse !important; }}
 
-            @keyframes glitch-text {
-                0% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
-                14% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
-                15% { text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }
-                49% { text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }
-                50% { text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }
-                99% { text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }
-                100% { text-shadow: -0.025em 0 0 rgba(255,0,0,0.75), -0.025em -0.025em 0 rgba(0,255,0,0.75), -0.025em -0.05em 0 rgba(0,0,255,0.75); }
-            }
+            @keyframes glitch-text {{
+                0% {{ text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }}
+                14% {{ text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }}
+                15% {{ text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }}
+                49% {{ text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }}
+                50% {{ text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }}
+                99% {{ text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }}
+                100% {{ text-shadow: -0.025em 0 0 rgba(255,0,0,0.75), -0.025em -0.025em 0 rgba(0,255,0,0.75), -0.025em -0.05em 0 rgba(0,0,255,0.75); }}
+            }}
         </style>
     """, unsafe_allow_html=True)
 
@@ -236,26 +220,26 @@ def save_score(tag, name, usn, time_val):
     try:
         # --- FINAL, ROBUST FIX ---
         # Use gspread directly, bypassing the st.connection object for writes.
-       
+        
         # 1. Define scopes and get credentials from Streamlit secrets
         scopes = [
             "https://spreadsheets.google.com/feeds",
             "https://www.googleapis.com/auth/drive"
         ]
-       
+        
         # st.connection automatically looks in "connections.gsheets", so we do the same
         # This assumes your secrets.toml has [connections.gsheets]
         creds_dict = st.secrets["connections"]["gsheets"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-       
+        
         # 2. Authorize gspread
         client = gspread.authorize(creds)
-       
+        
         # 3. Open the spreadsheet by its ID (also from secrets)
         if "spreadsheet" not in creds_dict:
             st.error("GSheets Error: 'spreadsheet' (URL) not found in secrets.")
             return False
-           
+            
         spreadsheet_url = creds_dict["spreadsheet"]
         sh = client.open_by_url(spreadsheet_url)
 
@@ -301,7 +285,9 @@ def get_leaderboard():
     return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
 
 # --- MAIN INIT ---
-inject_css()
+# Assumes the video "167784-837438543.mp4" is in the same folder as your .py file
+inject_css("167784-837438543.mp4") # <-- MODIFIED
+
 def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1 # <-- MODIFIED
 
 if 'game_state' not in st.session_state:
@@ -314,7 +300,7 @@ if st.session_state.game_state == "menu":
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
     name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
     usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
-   
+    
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn))):
         st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'player_name': name, 'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
         move_glitch(get_num_real_targets(0)); st.rerun()
@@ -330,7 +316,7 @@ if st.session_state.game_state == "menu":
         3. ADVANCE: Clear 3 Sectors.
         4. CAUTION: Sector 3 contains MULTIPLE simultaneous targets.
         """, unsafe_allow_html=True) # <-- MODIFIED
-       
+        
     with st.expander("CREDITS // SYSTEM INFO"):
         st.markdown("""
         DETROIT: ANOMALY [09]
@@ -352,7 +338,7 @@ elif st.session_state.game_state == "playing":
     c1, c2, c3 = st.columns(3)
     c1.markdown(f"AGENT: {st.session_state.player_tag}"); c2.markdown(f"TIME: {time.time()-st.session_state.start_time:.1f}s"); c3.markdown(f"LVL: {lvl+1}/3") # <-- MODIFIED
     st.progress(st.session_state.hits/needed, text=f"Neutralized: {st.session_state.hits}/{needed}")
-   
+    
     gif, scaled_real, scaled_fake = generate_scaled_gif(LEVEL_FILES[lvl], st.session_state.real_boxes, st.session_state.fake_boxes, GAME_WIDTH, lvl, st.session_state.glitch_seed)
     if gif:
         coords = streamlit_image_coordinates(gif, key=f"lvl_{lvl}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
