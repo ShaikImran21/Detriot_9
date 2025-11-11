@@ -27,18 +27,31 @@ def get_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- NEW FUNCTION: PLAY AUDIO ---
+# --- NEW FUNCTION: PLAY/STOP AUDIO ---
+# We use a global state to hold the placeholder for the looping music so we can stop it.
+if 'music_placeholder' not in st.session_state:
+    st.session_state.music_placeholder = None
+
 @st.cache_data(show_spinner=False, persist="disk")
 def get_audio_base64(bin_file):
-    # This is a separate function for caching audio files
     try:
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
+def stop_music_loop():
+    """Stops any currently playing looping background music."""
+    if st.session_state.music_placeholder is not None:
+        st.session_state.music_placeholder.empty()
+        st.session_state.music_placeholder = None
+
 def play_audio(audio_file, loop=False, file_type="wav"):
     """
-    Plays an audio file (wav or mp3) using Base64 embedding.
+    Plays an audio file. If loop=True, it manages the audio via a session state placeholder.
     """
+    if loop:
+        # Stop any existing loop before starting a new one
+        stop_music_loop()
+        
     try:
         audio_base64 = get_audio_base64(audio_file)
         if audio_base64:
@@ -48,8 +61,11 @@ def play_audio(audio_file, loop=False, file_type="wav"):
                     <source src="data:audio/{file_type};base64,{audio_base64}" type="audio/{file_type}">
                 </audio>
             """
-            # Just inject the markdown, don't use st.empty()
-            st.markdown(audio_html, unsafe_allow_html=True)
+            placeholder = st.empty()
+            placeholder.markdown(audio_html, unsafe_allow_html=True)
+
+            if loop:
+                st.session_state.music_placeholder = placeholder
     except:
         pass # Fail silently if file not found
 
@@ -350,6 +366,10 @@ def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1 # <-- MOD
 if 'game_state' not in st.session_state:
     # --- MODIFIED: Start on 'splash' screen ---
     st.session_state.update({'game_state': 'splash', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'player_name': '', 'player_usn': '', 'final_time': 0.0, 'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000), 'real_boxes': [], 'fake_boxes': [], 'hits': 0})
+# Added placeholder for music control
+if 'music_placeholder' not in st.session_state:
+    st.session_state.music_placeholder = None
+
 
 st.title("DETROIT: ANOMALY [09]")
 
@@ -387,7 +407,7 @@ elif st.session_state.game_state == "menu":
         </style>
         """, unsafe_allow_html=True)
     
-    # --- NOTE: Menu music is already playing from the splash screen ---
+    # --- NOTE: Music continues playing from the splash screen ---
     
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
@@ -395,6 +415,9 @@ elif st.session_state.game_state == "menu":
     usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
     
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn))):
+        # Stop menu music before starting gameplay music
+        stop_music_loop()
+        
         # --- ADDED: Play button click sound ---
         play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav")
         time.sleep(0.3) # <-- MODIFIED: Increased delay for reliability
@@ -483,6 +506,9 @@ elif st.session_state.game_state == "playing":
                 st.toast("MISS! RELOCATING...", icon="❌"); move_glitch(targets); st.rerun()
 
 elif st.session_state.game_state == "game_over":
+    # Stop gameplay music
+    stop_music_loop() 
+    
     st.balloons()
     st.markdown(f"## MISSION COMPLETE\n*OPERATIVE:* {st.session_state.player_name}\n*TIME:* {st.session_state.final_time:.2f}s")
     if st.button(">> UPLOAD SCORE <<", type="primary"):
