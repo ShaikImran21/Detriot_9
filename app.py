@@ -9,25 +9,7 @@ from streamlit_gsheets import GSheetsConnection
 from streamlit_image_coordinates import streamlit_image_coordinates
 import re 
 import gspread
-from google.oauth2.service_account import Credentials
-# Persistent container to keep menu music alive across reruns
-if 'menu_audio_container' not in st.session_state:
-    st.session_state.menu_audio_container = st.empty()
-
-def play_menu_music():
-    audio_file = "537256__humanfobia__letargo-sumergido.mp3"  # match your actual audio filename here
-    try:
-        audio_base64 = get_audio_base64(audio_file)
-        if audio_base64:
-            audio_html = f"""
-                <audio autoplay loop style="display:none;" id="menu-music">
-                    <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
-                </audio>
-            """
-            st.session_state.menu_audio_container.markdown(audio_html, unsafe_allow_html=True)
-    except:
-        pass
- # <-- ADDED IMPORT
+from google.oauth2.service_account import Credentials # <-- ADDED IMPORT
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="wide", initial_sidebar_state="collapsed")
@@ -70,8 +52,6 @@ def play_audio(audio_file, loop=False, file_type="wav"):
             st.markdown(audio_html, unsafe_allow_html=True)
     except:
         pass # Fail silently if file not found
-
-# --- DELETED THE DUPLICATE play_audio FUNCTION ---
 
 
 # --- CSS: ULTRA GLITCH + MOBILE FIX ---
@@ -268,7 +248,7 @@ def generate_scaled_gif(img_path, real_boxes_orig, fake_boxes_orig, target_width
         # 3. Resize the base image, forcing it into the new 16:9 dimensions
         base_img = base_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
         
-        # 4. Scale the original coordinates using the separate scale factors
+        # 4. Scale the original coordinates using the *separate* scale factors
         scaled_real = [(int(x1*sf_width), int(y1*sf_height), int(x2*sf_width), int(y2*sf_height)) for x1,y1,x2,y2 in real_boxes_orig]
         scaled_fake = [(int(x1*sf_width), int(y1*sf_height), int(x2*sf_width), int(y2*sf_height)) for x1,y1,x2,y2 in fake_boxes_orig]
         
@@ -368,19 +348,46 @@ inject_css("167784-837438543.mp4") # <-- MODIFIED
 def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1 # <-- MODIFIED
 
 if 'game_state' not in st.session_state:
-    st.session_state.update({'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'player_name': '', 'player_usn': '', 'final_time': 0.0, 'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000), 'real_boxes': [], 'fake_boxes': [], 'hits': 0})
+    # --- MODIFIED: Start on 'splash' screen ---
+    st.session_state.update({'game_state': 'splash', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'player_name': '', 'player_usn': '', 'final_time': 0.0, 'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000), 'real_boxes': [], 'fake_boxes': [], 'hits': 0})
 
 st.title("DETROIT: ANOMALY [09]")
 
-if st.session_state.game_state == "menu":
-    # --- ADDED: Show video and play menu music ---
+# --- NEW SPLASH SCREEN BLOCK ---
+if st.session_state.game_state == "splash":
+    # Show video and set background
     st.markdown("""
         <style>
         #video-bg { display: block !important; }
         .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }
         </style>
         """, unsafe_allow_html=True)
-    play_menu_music()
+    
+    # Center the button
+    col1, col2, col3 = st.columns([1,1,1])
+    with col2:
+        st.markdown("<br><br><br><br>", unsafe_allow_html=True) # Add vertical spacing
+        if st.button(">> [ ENTER ANOMALY ] <<", type="primary", use_container_width=True):
+            # This is the first click! Audio is now unlocked.
+            # Play the menu music *now*.
+            play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3")
+            time.sleep(0.3) # <-- ADDED THIS DELAY
+            
+            # Now, send the user to the real menu
+            st.session_state.game_state = "menu"
+            st.rerun()
+
+# --- MODIFIED: Changed to 'elif' ---
+elif st.session_state.game_state == "menu":
+    # --- MODIFIED: Added CSS back to keep background ---
+    st.markdown("""
+        <style>
+        #video-bg { display: block !important; }
+        .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }
+        </style>
+        """, unsafe_allow_html=True)
+    
+    # --- NOTE: Menu music is already playing from the splash screen ---
     
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
@@ -389,7 +396,7 @@ if st.session_state.game_state == "menu":
     
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn))):
         # --- ADDED: Play button click sound ---
-        play_audio("541987_rob_marion_gasp_ui_clicks_5.wav", file_type="wav")
+        play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav")
         time.sleep(0.3) # <-- MODIFIED: Increased delay for reliability
         
         st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'player_name': name, 'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
@@ -424,7 +431,7 @@ if st.session_state.game_state == "menu":
 
 elif st.session_state.game_state == "playing":
     # --- ADDED: Play gameplay music ---
-    play_audio("615546_projecteur_cosmic-dark-synthwave.mp3", loop=True, file_type="mp3")
+    play_audio("615546__projecteur__cosmic-dark-synthwave.mp3", loop=True, file_type="mp3")
 
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
@@ -442,7 +449,7 @@ elif st.session_state.game_state == "playing":
             
             if hit:
                 # --- FIXED: ADDED MISSING SOUND AND DELAY ---
-                play_audio("828680_jw_audio_uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav")
+                play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav")
                 time.sleep(0.3) # <-- ADDED THIS DELAY
                 
                 trigger_static_transition(); st.session_state.hits += 1
@@ -463,14 +470,14 @@ elif st.session_state.game_state == "playing":
                 
             elif fake_hit:
                 # --- ADDED: Play decoy hit sound ---
-                play_audio("713179_vein_adams_user-interface-beep-error-404-glitch.wav", file_type="wav")
+                play_audio("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav")
                 time.sleep(0.3) # <-- ADD THIS DELAY
                 
                 st.toast("DECOY NEUTRALIZED.", icon="⚠"); move_glitch(targets); st.rerun()
             
             else:
                 # --- ADDED: Play miss sound ---
-                play_audio("541987_rob_marion_gasp_ui_clicks_5.wav", file_type="wav")
+                play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav")
                 time.sleep(0.3) # <-- ADD THIS DELAY
                 
                 st.toast("MISS! RELOCATING...", icon="❌"); move_glitch(targets); st.rerun()
