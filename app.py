@@ -58,7 +58,7 @@ def inject_css(video_file_path): # <-- MODIFIED: Pass in the video path
                 height: auto;
                 z-index: -100; /* Puts it behind all content */
                 object-fit: cover; /* Fill the screen */
-                opacity: 0.4; /* Dim the video so text is readable */
+                opacity: 1.0; /* Dim the video so text is readable */
             }}
             /* --- END: VIDEO BACKGROUND --- */
 
@@ -68,7 +68,7 @@ def inject_css(video_file_path): # <-- MODIFIED: Pass in the video path
                 It's a semi-transparent overlay to darken the video
                 and keep the text readable.
                 */
-                background-color: #080808; /* 75% opaque dark */
+                background-color: rgba(8, 8, 8, 0.75); /* 75% opaque dark */
                 background-size: cover;
                 background-repeat: no-repeat;
                 background-attachment: fixed;
