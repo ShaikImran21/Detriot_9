@@ -8,6 +8,7 @@ from PIL import Image, ImageOps, ImageEnhance
 from streamlit_gsheets import GSheetsConnection
 from streamlit_image_coordinates import streamlit_image_coordinates
 import re 
+import gspread # <-- ADDED IMPORT FOR ROBUST FIX
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
@@ -163,9 +164,28 @@ except: pass
 def save_score(tag, name, usn, time_val):
     if conn:
         try:
-            # This is the line that appends to the Google Sheet
-            # FIX: Corrected typo 'worksWheet' to 'worksheet'
-            conn.write(worksheet="Scores", data=pd.DataFrame([{"Tag": tag, "Name": name, "USN": usn, "Time": time_val}]), append=True)
+            # --- NEW, ROBUST FIX ---
+            # Use the underlying gspread client for atomic append
+            
+            try:
+                # 1. Try to get the worksheet
+                worksheet = conn._spreadsheet.worksheet("Scores")
+            except gspread.exceptions.WorksheetNotFound:
+                # 2. If not found, create it and add headers
+                print("Worksheet 'Scores' not found, creating it.")
+                worksheet = conn._spreadsheet.add_worksheet(title="Scores", rows=100, cols=4)
+                worksheet.append_row(["Tag", "Name", "USN", "Time"])
+                print("Worksheet 'Scores' created with headers.")
+
+            # 3. Append the new score data
+            # Ensure all values are strings to avoid API issues
+            worksheet.append_row([
+                str(tag), 
+                str(name), 
+                str(usn), 
+                str(f"{time_val:.2f}") # Format time as string
+            ])
+            # --- END NEW FIX ---
             return True
         except Exception as e:
             # MODIFICATION: Print the actual error to the console and show it in Streamlit
