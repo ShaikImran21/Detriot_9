@@ -38,7 +38,8 @@ def inject_css():
             .stApp { 
                 /* OLD: background-color: #080808; */
                 /* NEW ANIMATED BACKGROUND */
-                background-image: url('https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdGZ2Y2dyYnhjZDY5ejd6czV4aG5qNTB6b2dndXpybWp5cDRpeDAYdyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/j5oESCsB3sY34iGOMp/giphy.gif');
+                /* background-image: url('https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdGZ2Y2dyYnhjZDY5ejd6czV4aG5qNTB6b2dndXpybWp5cDRpeDAYdyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/j5oESCsB3sY34iGOMp/giphy.gif'); */ /* REMOVED GLITCHY BACKGROUND GIF */
+                background-color: #080808; /* Solid dark background */
                 background-size: cover;
                 background-repeat: no-repeat;
                 background-attachment: fixed;
@@ -79,6 +80,8 @@ def inject_css():
                 padding: 10px 5px; 
             }
 
+            /* REMOVED GLITCHY TITLE BACKGROUND */
+            /*
             h1::before {
                 content: '';
                 position: absolute;
@@ -86,8 +89,8 @@ def inject_css():
                 left: 0;
                 width: 100%;
                 height: 100%;
-                background: #f00; /* Start red */
-                z-index: -1; /* Behind the text */
+                background: #f00; 
+                z-index: -1; 
                 opacity: 0.3;
                 animation: glitch-bg-block 150ms infinite linear;
             }
@@ -95,30 +98,31 @@ def inject_css():
             @keyframes glitch-bg-block {
                 0% {
                     transform: translate(3px, -3px);
-                    background: #f00; /* Red */
+                    background: #f00; 
                     opacity: 0.3;
                 }
                 25% {
                     transform: translate(-3px, 3px);
-                    background: #0ff; /* Cyan */
+                    background: #0ff; 
                     opacity: 0.4;
                 }
                 50% {
                     transform: translate(3px, 3px);
-                    background: #f0f; /* Magenta */
+                    background: #f0f; 
                     opacity: 0.2;
                 }
                 75% {
                     transform: translate(-3px, -3px);
-                    background: #0f0; /* Green */
+                    background: #0f0; 
                     opacity: 0.5;
                 }
                 100% {
                     transform: translate(3px, -3px);
-                    background: #f00; /* Red */
+                    background: #f00; 
                     opacity: 0.3;
                 }
             }
+            */
             /* --- END: Glitchy Title Background --- */
 
            
