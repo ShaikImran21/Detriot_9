@@ -453,23 +453,25 @@ elif st.session_state.game_state == "playing":
             if hit:
                 # --- ADDED: Play real hit sound ---
                 play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav")
+                time.sleep(0.3) # <-- ADD THIS DELAY
                 
                 trigger_static_transition(); st.session_state.hits += 1
                 if st.session_state.hits >= needed:
-                    if lvl < 2: st.session_state.current_level += 1; st.session_state.hits = 0; move_glitch(get_num_real_targets(st.session_state.current_level)) # <-- MODIFIED
-                    else: st.session_state.final_time = time.time() - st.session_state.start_time; st.session_state.game_state = 'game_over'
+                    # ... (rest of logic)
                 else: move_glitch(targets)
                 st.rerun()
                 
             elif fake_hit:
                 # --- ADDED: Play decoy hit sound ---
                 play_audio("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav")
+                time.sleep(0.3) # <-- ADD THIS DELAY
                 
                 st.toast("DECOY NEUTRALIZED.", icon="⚠"); move_glitch(targets); st.rerun()
             
             else:
                 # --- ADDED: Play miss sound ---
                 play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav")
+                time.sleep(0.3) # <-- ADD THIS DELAY
                 
                 st.toast("MISS! RELOCATING...", icon="❌"); move_glitch(targets); st.rerun()
 
