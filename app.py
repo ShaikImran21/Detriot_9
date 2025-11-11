@@ -250,7 +250,7 @@ def generate_scaled_gif(img_path, real_boxes_orig, fake_boxes_orig, target_width
         # 3. Resize the base image, forcing it into the new 16:9 dimensions
         base_img = base_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
         
-        # 4. Scale the original coordinates using the separate scale factors
+        # 4. Scale the original coordinates using the *separate* scale factors
         scaled_real = [(int(x1*sf_width), int(y1*sf_height), int(x2*sf_width), int(y2*sf_height)) for x1,y1,x2,y2 in real_boxes_orig]
         scaled_fake = [(int(x1*sf_width), int(y1*sf_height), int(x2*sf_width), int(y2*sf_height)) for x1,y1,x2,y2 in fake_boxes_orig]
         
@@ -362,7 +362,7 @@ if st.session_state.game_state == "menu":
         .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }
         </style>
         """, unsafe_allow_html=True)
-    play_audio("537256_humanfobia_letargo-sumergido.mp3", loop=True, file_type="mp3")
+    play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3")
     
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
@@ -371,7 +371,7 @@ if st.session_state.game_state == "menu":
     
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn))):
         # --- ADDED: Play button click sound ---
-        play_audio("541987_rob_marion_gasp_ui_clicks_5.wav", file_type="wav")
+        play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav")
         time.sleep(0.3) # <-- MODIFIED: Increased delay for reliability
         
         st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'player_name': name, 'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
@@ -406,7 +406,7 @@ if st.session_state.game_state == "menu":
 
 elif st.session_state.game_state == "playing":
     # --- ADDED: Play gameplay music ---
-    play_audio("615546_projecteur_cosmic-dark-synthwave.mp3", loop=True, file_type="mp3")
+    play_audio("615546__projecteur__cosmic-dark-synthwave.mp3", loop=True, file_type="mp3")
 
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
@@ -424,7 +424,7 @@ elif st.session_state.game_state == "playing":
             
             if hit:
                 # --- FIXED: ADDED MISSING SOUND AND DELAY ---
-                play_audio("828680_jw_audio_uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav")
+                play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav")
                 time.sleep(0.3) # <-- ADDED THIS DELAY
                 
                 trigger_static_transition(); st.session_state.hits += 1
@@ -445,14 +445,14 @@ elif st.session_state.game_state == "playing":
                 
             elif fake_hit:
                 # --- ADDED: Play decoy hit sound ---
-                play_audio("713179_vein_adams_user-interface-beep-error-404-glitch.wav", file_type="wav")
+                play_audio("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav")
                 time.sleep(0.3) # <-- ADD THIS DELAY
                 
                 st.toast("DECOY NEUTRALIZED.", icon="⚠"); move_glitch(targets); st.rerun()
             
             else:
                 # --- ADDED: Play miss sound ---
-                play_audio("541987_rob_marion_gasp_ui_clicks_5.wav", file_type="wav")
+                play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav")
                 time.sleep(0.3) # <-- ADD THIS DELAY
                 
                 st.toast("MISS! RELOCATING...", icon="❌"); move_glitch(targets); st.rerun()
