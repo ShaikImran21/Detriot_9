@@ -53,8 +53,6 @@ def play_audio(audio_file, loop=False, file_type="wav"):
     except:
         pass # Fail silently if file not found
 
-# --- DELETED THE DUPLICATE play_audio FUNCTION ---
-
 
 # --- CSS: ULTRA GLITCH + MOBILE FIX ---
 def inject_css(video_file_path): # <-- MODIFIED: Pass in the video path
@@ -350,19 +348,46 @@ inject_css("167784-837438543.mp4") # <-- MODIFIED
 def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1 # <-- MODIFIED
 
 if 'game_state' not in st.session_state:
-    st.session_state.update({'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'player_name': '', 'player_usn': '', 'final_time': 0.0, 'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000), 'real_boxes': [], 'fake_boxes': [], 'hits': 0})
+    # --- MODIFIED: Start on 'splash' screen ---
+    st.session_state.update({'game_state': 'splash', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'player_name': '', 'player_usn': '', 'final_time': 0.0, 'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000), 'real_boxes': [], 'fake_boxes': [], 'hits': 0})
 
 st.title("DETROIT: ANOMALY [09]")
 
-if st.session_state.game_state == "menu":
-    # --- ADDED: Show video and play menu music ---
+# --- NEW SPLASH SCREEN BLOCK ---
+if st.session_state.game_state == "splash":
+    # Show video and set background
     st.markdown("""
         <style>
         #video-bg { display: block !important; }
         .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }
         </style>
         """, unsafe_allow_html=True)
-    play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3")
+    
+    # Center the button
+    col1, col2, col3 = st.columns([1,1,1])
+    with col2:
+        st.markdown("<br><br><br><br>", unsafe_allow_html=True) # Add vertical spacing
+        if st.button(">> [ ENTER ANOMALY ] <<", type="primary", use_container_width=True):
+            # This is the first click! Audio is now unlocked.
+            # Play the menu music *now*.
+            play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3")
+            time.sleep(0.3) # <-- ADDED THIS DELAY
+            
+            # Now, send the user to the real menu
+            st.session_state.game_state = "menu"
+            st.rerun()
+
+# --- MODIFIED: Changed to 'elif' ---
+elif st.session_state.game_state == "menu":
+    # --- MODIFIED: Added CSS back to keep background ---
+    st.markdown("""
+        <style>
+        #video-bg { display: block !important; }
+        .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }
+        </style>
+        """, unsafe_allow_html=True)
+    
+    # --- NOTE: Menu music is already playing from the splash screen ---
     
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
