@@ -301,9 +301,7 @@ def get_leaderboard():
     return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
 
 # --- MAIN INIT ---
-# --- MAIN INIT ---
-# Assumes the video "167784-837438543.mp4" is in the same folder as your .py file
-inject_css("167784-837438543.mp4") 
+inject_css()
 def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1 # <-- MODIFIED
 
 if 'game_state' not in st.session_state:
