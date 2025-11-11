@@ -8,7 +8,8 @@ from PIL import Image, ImageOps, ImageEnhance
 from streamlit_gsheets import GSheetsConnection
 from streamlit_image_coordinates import streamlit_image_coordinates
 import re 
-import gspread # <-- ADDED IMPORT FOR ROBUST FIX
+import gspread
+from google.oauth2.service_account import Credentials # <-- ADDED IMPORT
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
@@ -162,37 +163,58 @@ try: conn = st.connection("gsheets", type=GSheetsConnection)
 except: pass
 
 def save_score(tag, name, usn, time_val):
-    if conn:
-        try:
-            # --- NEW, ROBUST FIX ---
-            # Use the underlying gspread client for atomic append
-            
-            try:
-                # 1. Try to get the worksheet
-                worksheet = conn._spreadsheet.worksheet("Scores")
-            except gspread.exceptions.WorksheetNotFound:
-                # 2. If not found, create it and add headers
-                print("Worksheet 'Scores' not found, creating it.")
-                worksheet = conn._spreadsheet.add_worksheet(title="Scores", rows=100, cols=4)
-                worksheet.append_row(["Tag", "Name", "USN", "Time"])
-                print("Worksheet 'Scores' created with headers.")
-
-            # 3. Append the new score data
-            # Ensure all values are strings to avoid API issues
-            worksheet.append_row([
-                str(tag), 
-                str(name), 
-                str(usn), 
-                str(f"{time_val:.2f}") # Format time as string
-            ])
-            # --- END NEW FIX ---
-            return True
-        except Exception as e:
-            # MODIFICATION: Print the actual error to the console and show it in Streamlit
-            print(f"GSheets Write Error: {e}")
-            st.error(f"GSheets Write Error: {e}")
+    # We can't use the 'conn' object for writing, as it's unreliable.
+    # We will build a new, direct gspread connection for writing.
+    try:
+        # --- FINAL, ROBUST FIX ---
+        # Use gspread directly, bypassing the st.connection object for writes.
+        
+        # 1. Define scopes and get credentials from Streamlit secrets
+        scopes = [
+            "https://spreadsheets.google.com/feeds",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        
+        # st.connection automatically looks in "connections.gsheets", so we do the same
+        # This assumes your secrets.toml has [connections.gsheets]
+        creds_dict = st.secrets["connections"]["gsheets"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        
+        # 2. Authorize gspread
+        client = gspread.authorize(creds)
+        
+        # 3. Open the spreadsheet by its ID (also from secrets)
+        if "spreadsheet_id" not in creds_dict:
+            st.error("GSheets Error: 'spreadsheet_id' not found in secrets.")
             return False
-    return False
+            
+        spreadsheet_id = creds_dict["spreadsheet_id"]
+        sh = client.open_by_key(spreadsheet_id)
+
+        try:
+            # 4. Try to get the worksheet
+            worksheet = sh.worksheet("Scores")
+        except gspread.exceptions.WorksheetNotFound:
+            # 5. If not found, create it and add headers
+            print("Worksheet 'Scores' not found, creating it.")
+            worksheet = sh.add_worksheet(title="Scores", rows=100, cols=4)
+            worksheet.append_row(["Tag", "Name", "USN", "Time"])
+            print("Worksheet 'Scores' created with headers.")
+
+        # 6. Append the new score data
+        worksheet.append_row([
+            str(tag), 
+            str(name), 
+            str(usn), 
+            str(f"{time_val:.2f}") # Format time as string
+        ])
+        # --- END NEW FIX ---
+        return True
+    except Exception as e:
+        # MODIFICATION: Print the actual error to the console and show it in Streamlit
+        print(f"GSheets Write Error: {e}")
+        st.error(f"GSheets Write Error: {e}")
+        return False
 
 def get_leaderboard():
     if conn:
