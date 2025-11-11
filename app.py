@@ -12,7 +12,7 @@ import gspread
 from google.oauth2.service_account import Credentials # <-- ADDED IMPORT
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 1200
 # MAXIMUM TOLERANCE: Very easy to hit now, perfect for all mobile users.
