@@ -12,7 +12,7 @@ import gspread
 from google.oauth2.service_account import Credentials # <-- ADDED IMPORT
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="wide", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 1200
 # MAXIMUM TOLERANCE: Very easy to hit now, perfect for all mobile users.
@@ -126,6 +126,21 @@ def inject_css(video_file_path): # <-- MODIFIED: Pass in the video path
                 50% {{ text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }}
                 99% {{ text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }}
                 100% {{ text-shadow: -0.025em 0 0 rgba(255,0,0,0.75), -0.025em -0.025em 0 rgba(0,255,0,0.75), -0.025em -0.05em 0 rgba(0,0,255,0.75); }}
+            }}
+            /* --- NEW: MOBILE-SPECIFIC RULES --- */
+            @media (max-width: 768px) {{
+                
+                /* Find the component and its image */
+                div[data-testid="stImageCoordinates"] img {{
+                    /* Override the inline style and force to 100% width */
+                    width: 100% !important;
+                    height: auto !important; /* Keep aspect ratio */
+                }}
+
+                /* Force the component's container to 100% too */
+                div[data-testid="stImageCoordinates"] {{
+                    width: 100% !important;
+                }}
             }}
         </style>
     """, unsafe_allow_html=True)
