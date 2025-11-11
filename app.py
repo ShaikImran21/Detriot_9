@@ -29,6 +29,7 @@ def get_base64(bin_file):
 
 # --- NEW FUNCTION: PLAY AUDIO ---
 # --- NEW FUNCTION: PLAY AUDIO ---
+# --- NEW FUNCTION: PLAY AUDIO ---
 @st.cache_data(show_spinner=False, persist="disk")
 def get_audio_base64(bin_file):
     # This is a separate function for caching audio files
