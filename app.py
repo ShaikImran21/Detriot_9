@@ -28,12 +28,33 @@ def get_base64(bin_file):
     except: return None
 
 # --- NEW FUNCTION: PLAY AUDIO ---
+# --- NEW FUNCTION: PLAY AUDIO ---
 @st.cache_data(show_spinner=False, persist="disk")
 def get_audio_base64(bin_file):
     # This is a separate function for caching audio files
     try:
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
+
+def play_audio(audio_file, loop=False, file_type="wav"):
+    """
+    Plays an audio file (wav or mp3) using Base64 embedding.
+    """
+    try:
+        audio_base64 = get_audio_base64(audio_file)
+        if audio_base64:
+            loop_attr = "loop" if loop else ""
+            audio_html = f"""
+                <audio autoplay {loop_attr} style="display:none;">
+                    <source src="data:audio/{file_type};base64,{audio_base64}" type="audio/{file_type}">
+                </audio>
+            """
+            # --- THIS IS THE ONLY CHANGE ---
+            # Just inject the markdown, don't use st.empty()
+            st.markdown(audio_html, unsafe_allow_html=True)
+            # ---------------------------------
+    except:
+        pass # Fail silently if file not found
 
 def play_audio(audio_file, loop=False, file_type="wav"):
     """
