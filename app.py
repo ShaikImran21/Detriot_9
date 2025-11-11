@@ -68,7 +68,7 @@ def inject_css(video_file_path): # <-- MODIFIED: Pass in the video path
                 It's a semi-transparent overlay to darken the video
                 and keep the text readable.
                 */
-                background-color: rgba(8, 8, 8, 0.75); /* 75% opaque dark */
+                background-color: #080808; /* 75% opaque dark */
                 background-size: cover;
                 background-repeat: no-repeat;
                 background-attachment: fixed;
@@ -314,6 +314,12 @@ if 'game_state' not in st.session_state:
 st.title("DETROIT: ANOMALY [09]")
 
 if st.session_state.game_state == "menu":
+    st.markdown("""
+        <style>
+        #video-bg { display: block !important; }
+        .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }
+        </style>
+        """, unsafe_allow_html=True)
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
     name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
