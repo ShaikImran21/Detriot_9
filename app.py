@@ -35,7 +35,17 @@ def inject_css():
     st.markdown("""
         <style>
             /* BASE THEME */
-            .stApp { background-color: #080808; color: #d0d0d0; font-family: 'Courier New', monospace; }
+            .stApp { 
+                /* OLD: background-color: #080808; */
+                /* NEW ANIMATED BACKGROUND */
+                background-image: url('https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdGZ2Y2dyYnhjZDY5ejd6czV4aG5qNTB6b2dndXpybWp5cDRpeDAYdyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/j5oESCsB3sY34iGOMp/giphy.gif');
+                background-size: cover;
+                background-repeat: no-repeat;
+                background-attachment: fixed;
+                background-position: center;
+                color: #d0d0d0; 
+                font-family: 'Courier New', monospace; 
+            }
             #MainMenu, footer, header {visibility: hidden;}
 
             /* FORCE HORIZONTAL SCROLL ON MOBILE (Prevents squishing) */
@@ -251,17 +261,7 @@ if st.session_state.game_state == "menu":
         st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'player_name': name, 'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
         move_glitch(get_num_real_targets(0)); st.rerun()
 
-    # --- NEW TEST BUTTON ---
-    if st.button(">> TEST SCORE UPLOAD <<"):
-        st.write("Attempting test score upload...")
-        with st.spinner("UPLOADING TEST DATA..."):
-            # Using dummy data to test the write function
-            if save_score("TST", "TEST USER", "1MS22AI999", 99.99):
-                st.success("TEST UPLOAD SUCCESSFUL.")
-            else:
-                # The save_score function will now print the specific error
-                st.error("TEST UPLOAD FAILED. Check logs above/console for details.")
-    # --- END NEW TEST BUTTON ---
+    # --- TEST BUTTON REMOVED ---
 
     with st.expander("MISSION BRIEFING // RULES"):
         st.markdown("""
