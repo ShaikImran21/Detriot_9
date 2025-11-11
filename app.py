@@ -27,6 +27,41 @@ def get_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
+# --- NEW FUNCTION: PLAY AUDIO ---
+@st.cache_data(show_spinner=False, persist="disk")
+def get_audio_base64(bin_file):
+    # This is a separate function for caching audio files
+    try:
+        with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
+    except: return None
+
+def play_audio(audio_file, loop=False, file_type="wav"):
+    """
+    Plays an audio file (wav or mp3) using Base64 embedding.
+    audio_file: The path to the audio file.
+    loop: True/False for looping (for music).
+    file_type: 'wav' or 'mp3'
+    """
+    try:
+        audio_base64 = get_audio_base64(audio_file)
+        if audio_base64:
+            loop_attr = "loop" if loop else ""
+            audio_html = f"""
+                <audio autoplay {loop_attr} style="display:none;">
+                    <source src="data:audio/{file_type};base64,{audio_base64}" type="audio/{file_type}">
+                </audio>
+            """
+            # Use st.empty() to create a non-disruptive container
+            container = st.empty()
+            container.markdown(audio_html, unsafe_allow_html=True)
+            # For non-looping sounds, clear the element after a short delay
+            if not loop:
+                time.sleep(0.1) # Give it time to start
+                container.empty()
+    except:
+        pass # Fail silently if file not found
+
+
 # --- CSS: ULTRA GLITCH + MOBILE FIX ---
 def inject_css(video_file_path): # <-- MODIFIED: Pass in the video path
     
@@ -59,16 +94,13 @@ def inject_css(video_file_path): # <-- MODIFIED: Pass in the video path
                 z-index: -100; /* Puts it behind all content */
                 object-fit: cover; /* Fill the screen */
                 opacity: 1.0; /* Dim the video so text is readable */
+                display: none; /* <-- HIDDEN BY DEFAULT */
             }}
             /* --- END: VIDEO BACKGROUND --- */
 
             /* BASE THEME - MODIFIED for VIDEO */
             .stApp {{ 
-                /* This is no longer a solid color.
-                It's a semi-transparent overlay to darken the video
-                and keep the text readable.
-                */
-                background-color: #080808; /* 75% opaque dark */
+                background-color: #080808; /* SOLID BY DEFAULT */
                 background-size: cover;
                 background-repeat: no-repeat;
                 background-attachment: fixed;
@@ -204,7 +236,7 @@ def generate_mutating_frame(base_img, boxes, is_fake=False):
             except: pass
     return frame
 
-@st.cache_data(show_spinner=False, persist="disk")
+# --- Cleaned up duplicate decorator ---
 @st.cache_data(show_spinner=False, persist="disk")
 def generate_scaled_gif(img_path, real_boxes_orig, fake_boxes_orig, target_width, level_idx, glitch_seed):
     try:
@@ -329,18 +361,25 @@ if 'game_state' not in st.session_state:
 st.title("DETROIT: ANOMALY [09]")
 
 if st.session_state.game_state == "menu":
+    # --- ADDED: Show video and play menu music ---
     st.markdown("""
         <style>
         #video-bg { display: block !important; }
         .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }
         </style>
         """, unsafe_allow_html=True)
+    play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3")
+    
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
     name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
     usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
     
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn))):
+        # --- ADDED: Play button click sound ---
+        play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav")
+        time.sleep(0.1) # Give sound a moment to start
+        
         st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'player_name': name, 'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
         move_glitch(get_num_real_targets(0)); st.rerun()
 
@@ -372,6 +411,9 @@ if st.session_state.game_state == "menu":
     else: st.error("CONNECTION SEVERED.")
 
 elif st.session_state.game_state == "playing":
+    # --- ADDED: Play gameplay music ---
+    play_audio("615546__projecteur__cosmic-dark-synthwave.mp3", loop=True, file_type="mp3")
+
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
     c1, c2, c3 = st.columns(3)
@@ -385,15 +427,29 @@ elif st.session_state.game_state == "playing":
             cx, cy = coords['x'], coords['y']
             hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_real)
             fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_fake)
+            
             if hit:
+                # --- ADDED: Play real hit sound ---
+                play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav")
+                
                 trigger_static_transition(); st.session_state.hits += 1
                 if st.session_state.hits >= needed:
                     if lvl < 2: st.session_state.current_level += 1; st.session_state.hits = 0; move_glitch(get_num_real_targets(st.session_state.current_level)) # <-- MODIFIED
                     else: st.session_state.final_time = time.time() - st.session_state.start_time; st.session_state.game_state = 'game_over'
                 else: move_glitch(targets)
                 st.rerun()
-            elif fake_hit: st.toast("DECOY NEUTRALIZED.", icon="⚠"); move_glitch(targets); st.rerun()
-            else: st.toast("MISS! RELOCATING...", icon="❌"); move_glitch(targets); st.rerun()
+                
+            elif fake_hit:
+                # --- ADDED: Play decoy hit sound ---
+                play_audio("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav")
+                
+                st.toast("DECOY NEUTRALIZED.", icon="⚠"); move_glitch(targets); st.rerun()
+            
+            else:
+                # --- ADDED: Play miss sound ---
+                play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav")
+                
+                st.toast("MISS! RELOCATING...", icon="❌"); move_glitch(targets); st.rerun()
 
 elif st.session_state.game_state == "game_over":
     st.balloons()
