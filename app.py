@@ -18,7 +18,7 @@ GAME_WIDTH = 1200
 # MAXIMUM TOLERANCE: Very easy to hit now, perfect for all mobile users.
 HIT_TOLERANCE = 150 
 
-LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png"] # <-- MODIFIED
+LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets.level3.png"] # <-- MODIFIED
 GLITCHES_PER_LEVEL = [3, 5, 7] # <-- MODIFIED
 
 # --- HELPER: ASSETS ---
@@ -53,7 +53,7 @@ def play_audio(audio_file, loop=False, file_type="wav"):
     except:
         pass # Fail silently if file not found
 
-# --- DELETED THE DUPLICATE play_audio FUNCTION ---
+# --- FIXED: REMOVED THE DUPLICATE play_audio FUNCTION ---
 
 
 # --- CSS: ULTRA GLITCH + MOBILE FIX ---
@@ -350,19 +350,36 @@ inject_css("167784-837438543.mp4") # <-- MODIFIED
 def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1 # <-- MODIFIED
 
 if 'game_state' not in st.session_state:
-    st.session_state.update({'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'player_name': '', 'player_usn': '', 'final_time': 0.0, 'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000), 'real_boxes': [], 'fake_boxes': [], 'hits': 0})
+    st.session_state.update({'game_state': 'splash', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'player_name': '', 'player_usn': '', 'final_time': 0.0, 'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000), 'real_boxes': [], 'fake_boxes': [], 'hits': 0}) # <-- MODIFIED: Start on 'splash'
 
 st.title("DETROIT: ANOMALY [09]")
 
-if st.session_state.game_state == "menu":
-    # --- ADDED: Show video and play menu music ---
+# --- NEW SPLASH SCREEN BLOCK ---
+if st.session_state.game_state == "splash":
+    # Show video and set background
     st.markdown("""
         <style>
         #video-bg { display: block !important; }
         .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }
         </style>
         """, unsafe_allow_html=True)
-    play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3")
+    
+    # Center the button
+    col1, col2, col3 = st.columns([1,1,1])
+    with col2:
+        st.markdown("<br><br><br><br>", unsafe_allow_html=True) # Add vertical spacing
+        if st.button(">> [ ENTER ANOMALY ] <<", type="primary", use_container_width=True):
+            # This is the first click! Audio is now unlocked.
+            # Play the menu music *now*.
+            play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3")
+            
+            # Now, send the user to the real menu
+            st.session_state.game_state = "menu"
+            st.rerun()
+
+# --- MODIFIED: Changed 'if' to 'elif' ---
+elif st.session_state.game_state == "menu":
+    # --- MODIFIED: REMOVED CSS AND MUSIC (It's on the splash page now) ---
     
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
