@@ -28,8 +28,6 @@ def get_base64(bin_file):
     except: return None
 
 # --- NEW FUNCTION: PLAY AUDIO ---
-# --- NEW FUNCTION: PLAY AUDIO ---
-# --- NEW FUNCTION: PLAY AUDIO ---
 @st.cache_data(show_spinner=False, persist="disk")
 def get_audio_base64(bin_file):
     # This is a separate function for caching audio files
@@ -50,38 +48,12 @@ def play_audio(audio_file, loop=False, file_type="wav"):
                     <source src="data:audio/{file_type};base64,{audio_base64}" type="audio/{file_type}">
                 </audio>
             """
-            # --- THIS IS THE ONLY CHANGE ---
             # Just inject the markdown, don't use st.empty()
             st.markdown(audio_html, unsafe_allow_html=True)
-            # ---------------------------------
     except:
         pass # Fail silently if file not found
 
-def play_audio(audio_file, loop=False, file_type="wav"):
-    """
-    Plays an audio file (wav or mp3) using Base64 embedding.
-    audio_file: The path to the audio file.
-    loop: True/False for looping (for music).
-    file_type: 'wav' or 'mp3'
-    """
-    try:
-        audio_base64 = get_audio_base64(audio_file)
-        if audio_base64:
-            loop_attr = "loop" if loop else ""
-            audio_html = f"""
-                <audio autoplay {loop_attr} style="display:none;">
-                    <source src="data:audio/{file_type};base64,{audio_base64}" type="audio/{file_type}">
-                </audio>
-            """
-            # Use st.empty() to create a non-disruptive container
-            container = st.empty()
-            container.markdown(audio_html, unsafe_allow_html=True)
-            # For non-looping sounds, clear the element after a short delay
-            if not loop:
-                time.sleep(0.1) # Give it time to start
-                container.empty()
-    except:
-        pass # Fail silently if file not found
+# --- DELETED THE DUPLICATE play_audio FUNCTION ---
 
 
 # --- CSS: ULTRA GLITCH + MOBILE FIX ---
@@ -400,7 +372,7 @@ if st.session_state.game_state == "menu":
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn))):
         # --- ADDED: Play button click sound ---
         play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav")
-        time.sleep(0.1) # Give sound a moment to start
+        time.sleep(0.3) # <-- MODIFIED: Increased delay for reliability
         
         st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'player_name': name, 'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
         move_glitch(get_num_real_targets(0)); st.rerun()
@@ -451,10 +423,13 @@ elif st.session_state.game_state == "playing":
             fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_fake)
             
             if hit:
-                # ... (all your hit logic) ...
+                # --- FIXED: ADDED MISSING SOUND AND DELAY ---
+                play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav")
+                time.sleep(0.3) # <-- ADDED THIS DELAY
+                
+                trigger_static_transition(); st.session_state.hits += 1
                 
                 if st.session_state.hits >= needed:
-                    # ----> FIX THIS INDENTATION <----
                     if lvl < 2: 
                         st.session_state.current_level += 1
                         st.session_state.hits = 0
@@ -462,7 +437,6 @@ elif st.session_state.game_state == "playing":
                     else: 
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
-                    # ----> END OF FIX <----
                 
                 else: 
                     move_glitch(targets)
