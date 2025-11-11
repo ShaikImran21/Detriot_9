@@ -191,20 +191,39 @@ def generate_mutating_frame(base_img, boxes, is_fake=False):
     return frame
 
 @st.cache_data(show_spinner=False, persist="disk")
+@st.cache_data(show_spinner=False, persist="disk")
 def generate_scaled_gif(img_path, real_boxes_orig, fake_boxes_orig, target_width, level_idx, glitch_seed):
     try:
         random.seed(glitch_seed)
         base_img = Image.open(img_path).convert("RGB")
-        sf = target_width / base_img.width
-        base_img = base_img.resize((target_width, int(base_img.height * sf)), Image.Resampling.LANCZOS)
-        scaled_real = [(int(x1*sf), int(y1*sf), int(x2*sf), int(y2*sf)) for x1,y1,x2,y2 in real_boxes_orig]
-        scaled_fake = [(int(x1*sf), int(y1*sf), int(x2*sf), int(y2*sf)) for x1,y1,x2,y2 in fake_boxes_orig]
+        
+        # --- START: 16:9 MODIFICATION ---
+        
+        # 1. Calculate the new 16:9 height based on the target_width
+        target_height = int(target_width * (9 / 16))
+        
+        # 2. Calculate separate scale factors for width and height
+        #    This is necessary because we are changing the aspect ratio.
+        sf_width = target_width / base_img.width
+        sf_height = target_height / base_img.height
+        
+        # 3. Resize the base image, forcing it into the new 16:9 dimensions
+        base_img = base_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+        
+        # 4. Scale the original coordinates using the *separate* scale factors
+        scaled_real = [(int(x1*sf_width), int(y1*sf_height), int(x2*sf_width), int(y2*sf_height)) for x1,y1,x2,y2 in real_boxes_orig]
+        scaled_fake = [(int(x1*sf_width), int(y1*sf_height), int(x2*sf_width), int(y2*sf_height)) for x1,y1,x2,y2 in fake_boxes_orig]
+        
+        # --- END: 16:9 MODIFICATION ---
+        
         frames = [base_img.copy() for _ in range(15)]
         for _ in range(8):
             frames.append(generate_mutating_frame(generate_mutating_frame(base_img, real_boxes_orig, False), fake_boxes_orig, True))
+        
         temp_file = f"/tmp/lvl_{level_idx}_{glitch_seed}.gif"
         frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15+[70]*8, loop=0)
         return temp_file, scaled_real, scaled_fake
+    
     except: return None, [], []
 
 def validate_usn(usn): return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
