@@ -1,4 +1,4 @@
-import streamlit as st
+aimport streamlit as st
 import time
 import pandas as pd
 import random
@@ -10,23 +10,6 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 import re 
 import gspread
 from google.oauth2.service_account import Credentials # <-- ADDED IMPORT
-if 'menu_audio_container' not in st.session_state:
-    st.session_state.menu_audio_container = st.empty()
-
-def play_menu_music():
-    audio_file = "537256__humanfobia__letargo-sumergido.mp3"
-    try:
-        audio_base64 = get_audio_base64(audio_file)
-        if audio_base64:
-            audio_html = f"""
-                <audio autoplay loop style="display:none;" id="menu-music">
-                    <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
-                </audio>
-            """
-            st.session_state.menu_audio_container.markdown(audio_html, unsafe_allow_html=True)
-    except:
-        pass
-
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="wide", initial_sidebar_state="collapsed")
@@ -379,8 +362,7 @@ if st.session_state.game_state == "menu":
         .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }
         </style>
         """, unsafe_allow_html=True)
-    play_menu_music()
-
+    play_audio("537256_humanfobia_letargo-sumergido.mp3", loop=True, file_type="mp3")
     
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
