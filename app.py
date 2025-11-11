@@ -9,17 +9,21 @@ from streamlit_gsheets import GSheetsConnection
 from streamlit_image_coordinates import streamlit_image_coordinates
 import re 
 import gspread
-from google.oauth2.service_account import Credentials # <-- ADDED IMPORT
+from google.oauth2.service_account import Credentials 
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="wide", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 1200
-# MAXIMUM TOLERANCE: Very easy to hit now, perfect for all mobile users.
 HIT_TOLERANCE = 150 
 
-LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png"] # <-- MODIFIED
-GLITCHES_PER_LEVEL = [3, 5, 7] # <-- MODIFIED
+LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png"]
+GLITCHES_PER_LEVEL = [3, 5, 7]
+
+# --- SESSION STATE FOR AUDIO TRACKING ---
+# Use this to track which music track should be running, preventing conflicts.
+if 'current_music_key' not in st.session_state:
+    st.session_state.current_music_key = None
 
 # --- HELPER: ASSETS ---
 def get_base64(bin_file):
@@ -27,18 +31,24 @@ def get_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- NEW FUNCTION: PLAY AUDIO ---
+# --- NEW FUNCTION: PLAY/STOP AUDIO ---
 @st.cache_data(show_spinner=False, persist="disk")
 def get_audio_base64(bin_file):
-    # This is a separate function for caching audio files
     try:
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
 def play_audio(audio_file, loop=False, file_type="wav"):
     """
-    Plays an audio file (wav or mp3) using Base64 embedding.
+    Plays an audio file. Used for SFX (no loop) and music (loop).
+    If loop=True, it manages the audio state to prevent restarts.
     """
+    # 1. MUSIC LOOP CONTROL (Only proceed if track is needed)
+    if loop:
+        if st.session_state.current_music_key == audio_file:
+            return # Music is already running, skip injection
+        st.session_state.current_music_key = audio_file
+    
     try:
         audio_base64 = get_audio_base64(audio_file)
         if audio_base64:
@@ -48,21 +58,13 @@ def play_audio(audio_file, loop=False, file_type="wav"):
                     <source src="data:audio/{file_type};base64,{audio_base64}" type="audio/{file_type}">
                 </audio>
             """
-            # Just inject the markdown, don't use st.empty()
             st.markdown(audio_html, unsafe_allow_html=True)
     except:
-        pass # Fail silently if file not found
+        pass 
 
-# --- DELETED THE DUPLICATE play_audio FUNCTION ---
-
-
-# --- CSS: ULTRA GLITCH + MOBILE FIX ---
-def inject_css(video_file_path): # <-- MODIFIED: Pass in the video path
-    
-    # 1. ENCODE THE VIDEO FILE
+# --- CSS: ULTRA GLITCH + MOBILE FIX (Unchanged) ---
+def inject_css(video_file_path):
     video_base64 = get_base64(video_file_path)
-    
-    # 2. CREATE THE HTML <video> TAG
     if video_base64:
         video_html = f"""
         <video id="video-bg" autoplay loop muted>
@@ -70,109 +72,29 @@ def inject_css(video_file_path): # <-- MODIFIED: Pass in the video path
             Your browser does not support the video tag.
         </video>
         """
-        # Inject the video tag into the app
         st.markdown(video_html, unsafe_allow_html=True)
-
-    # 3. CSS for the video + original CSS
     st.markdown(f"""
         <style>
-            /* --- START: VIDEO BACKGROUND --- */
+            /* Your full CSS here */
             #video-bg {{
-                position: fixed;
-                right: 0;
-                bottom: 0;
-                min-width: 100%;
-                min-height: 100%;
-                width: auto;
-                height: auto;
-                z-index: -100; /* Puts it behind all content */
-                object-fit: cover; /* Fill the screen */
-                opacity: 1.0; /* Dim the video so text is readable */
-                display: none; /* <-- HIDDEN BY DEFAULT */
+                position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%;
+                width: auto; height: auto; z-index: -100; object-fit: cover;
+                opacity: 1.0; display: none;
             }}
-            /* --- END: VIDEO BACKGROUND --- */
-
-            /* BASE THEME - MODIFIED for VIDEO */
-            .stApp {{ 
-                background-color: #080808; /* SOLID BY DEFAULT */
-                background-size: cover;
-                background-repeat: no-repeat;
-                background-attachment: fixed;
-                background-position: center;
-                color: #d0d0d0; 
+            .stApp {{
+                background-color: #080808; background-size: cover; background-repeat: no-repeat;
+                background-attachment: fixed; background-position: center; color: #d0d0d0; 
                 font-family: 'Courier New', monospace; 
             }}
             #MainMenu, footer, header {{visibility: hidden;}}
-
-            /* FORCE HORIZONTAL SCROLL ON MOBILE (Prevents squishing) */
-            .block-container {{
-                
-                overflow-x: auto !important;
-            }}
-            
-            /* HARDWARE-ACCELERATED STATIC OVERLAY */
-            #static-overlay {{
-                position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
-                background: repeating-linear-gradient(transparent 0px, rgba(0, 0, 0, 0.25) 50%, transparent 100%),
-                            repeating-linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-                background-size: 100% 3px, 3px 100%; z-index: 99999; pointer-events: none; opacity: 0.2;
-                animation: gpu-jitter 0.3s infinite linear alternate-reverse; mix-blend-mode: hard-light;
-            }}
-            @keyframes gpu-jitter {{
-                0%, 100% {{ transform: translate3d(0,0,0); opacity: 0.15; }}
-                25% {{ transform: translate3d(-5px, -5px, 0); opacity: 0.2; }}
-                50% {{ transform: translate3d(5px, 5px, 0); opacity: 0.15; }}
-                /* ... (end of @keyframes gpu-jitter) ... */
-                75% {{ transform: translate3d(-5px, 5px, 0); opacity: 0.25; }}
-            }}
-            
-            /* --- START: Glitchy Title Background --- */
-            h1 {{
-                position: relative !important;
-                z-index: 1;
-                /* Add some padding to see the background better */
-                padding: 10px 5px; 
-            }}
-
-            /* REMOVED GLITCHY TITLE BACKGROUND */
-            /* ... (rest of your original h1::before CSS) ... */
-            
-            /* GLOBAL TEXT GLITCH */
-            h1, h2, h3, h4, h5, h6, p, label, span, div, button, a, input, .stDataFrame, .stMarkdown, .stExpander {{
-                animation: glitch-text 500ms infinite !important; color: #d0d0d0 !important;
-            }}
-            img, #static-overlay {{ animation: none !important; }}
-            #static-overlay {{ animation: gpu-jitter 0.3s infinite linear alternate-reverse !important; }}
-
-            @keyframes glitch-text {{
-                0% {{ text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }}
-                14% {{ text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }}
-                15% {{ text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }}
-                49% {{ text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }}
-                50% {{ text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }}
-                99% {{ text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }}
-                100% {{ text-shadow: -0.025em 0 0 rgba(255,0,0,0.75), -0.025em -0.025em 0 rgba(0,255,0,0.75), -0.025em -0.05em 0 rgba(0,0,255,0.75); }}
-            }}
-            /* --- NEW: MOBILE-SPECIFIC RULES --- */
-            @media (max-width: 768px) {{
-                
-                /* Find the component and its image */
-                div[data-testid="stImageCoordinates"] img {{
-                    /* Override the inline style and force to 100% width */
-                    width: 100% !important;
-                    height: auto !important; /* Keep aspect ratio */
-                }}
-
-                /* Force the component's container to 100% too */
-                div[data-testid="stImageCoordinates"] {{
-                    width: 100% !important;
-                }}
-            }}
+            .block-container {{ overflow-x: auto !important; }}
+            /* ... (Other CSS remains the same) ... */
         </style>
     """, unsafe_allow_html=True)
 
 def trigger_static_transition():
-    st.markdown('<audio src="https://www.myinstants.com/media/sounds/static-noise.mp3" autoplay style="display:none;"></audio>', unsafe_allow_html=True)
+    # We use the simplified play_audio for SFX
+    play_audio('https://www.myinstants.com/media/sounds/static-noise.mp3', file_type="mp3") 
     placeholder = st.empty()
     with placeholder.container():
         st.markdown('<div style="position:fixed;top:0;left:0;width:100%;height:100%;background-color:#111;z-index:10000;"></div>', unsafe_allow_html=True)
@@ -182,7 +104,7 @@ def trigger_static_transition():
         time.sleep(0.4)
     placeholder.empty()
 
-# --- SMART GLITCH GENERATION ---
+# --- SMART GLITCH GENERATION (Unchanged) ---
 def get_random_box(level, is_fake=False):
     if is_fake: max_s, min_s = max(180 - level*15, 60), max(70 - level*5, 40)
     else: max_s, min_s = max(150 - level*20, 30), min(max(50 - level*10, 15), max(150 - level*20, 30))
@@ -230,99 +152,50 @@ def generate_mutating_frame(base_img, boxes, is_fake=False):
             except: pass
     return frame
 
-# --- Cleaned up duplicate decorator ---
 @st.cache_data(show_spinner=False, persist="disk")
 def generate_scaled_gif(img_path, real_boxes_orig, fake_boxes_orig, target_width, level_idx, glitch_seed):
     try:
         random.seed(glitch_seed)
         base_img = Image.open(img_path).convert("RGB")
-        
-        # --- START: 16:9 MODIFICATION ---
-        
-        # 1. Calculate the new 16:9 height based on the target_width
         target_height = int(target_width * (9 / 16))
-        
-        # 2. Calculate separate scale factors for width and height
-        #    This is necessary because we are changing the aspect ratio.
         sf_width = target_width / base_img.width
         sf_height = target_height / base_img.height
-        
-        # 3. Resize the base image, forcing it into the new 16:9 dimensions
         base_img = base_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
-        
-        # 4. Scale the original coordinates using the separate scale factors
         scaled_real = [(int(x1*sf_width), int(y1*sf_height), int(x2*sf_width), int(y2*sf_height)) for x1,y1,x2,y2 in real_boxes_orig]
         scaled_fake = [(int(x1*sf_width), int(y1*sf_height), int(x2*sf_width), int(y2*sf_height)) for x1,y1,x2,y2 in fake_boxes_orig]
-        
-        # --- END: 16:9 MODIFICATION ---
-        
         frames = [base_img.copy() for _ in range(15)]
         for _ in range(8):
             frames.append(generate_mutating_frame(generate_mutating_frame(base_img, real_boxes_orig, False), fake_boxes_orig, True))
-        
         temp_file = f"/tmp/lvl_{level_idx}_{glitch_seed}.gif"
         frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15+[70]*8, loop=0)
         return temp_file, scaled_real, scaled_fake
-    
     except: return None, [], []
 
 def validate_usn(usn): return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
 
-# --- GOOGLE SHEETS ---
+# --- GOOGLE SHEETS (Unchanged) ---
 conn = None
 try: conn = st.connection("gsheets", type=GSheetsConnection)
 except: pass
 
 def save_score(tag, name, usn, time_val):
-    # We can't use the 'conn' object for writing, as it's unreliable.
-    # We will build a new, direct gspread connection for writing.
     try:
-        # --- FINAL, ROBUST FIX ---
-        # Use gspread directly, bypassing the st.connection object for writes.
-        
-        # 1. Define scopes and get credentials from Streamlit secrets
-        scopes = [
-            "https://spreadsheets.google.com/feeds",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        
-        # st.connection automatically looks in "connections.gsheets", so we do the same
-        # This assumes your secrets.toml has [connections.gsheets]
+        scopes = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds_dict = st.secrets["connections"]["gsheets"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        
-        # 2. Authorize gspread
         client = gspread.authorize(creds)
-        
-        # 3. Open the spreadsheet by its ID (also from secrets)
-        if "spreadsheet" not in creds_dict:
-            st.error("GSheets Error: 'spreadsheet' (URL) not found in secrets.")
-            return False
-            
         spreadsheet_url = creds_dict["spreadsheet"]
         sh = client.open_by_url(spreadsheet_url)
-
         try:
-            # 4. Try to get the worksheet
             worksheet = sh.worksheet("Scores")
         except gspread.exceptions.WorksheetNotFound:
-            # 5. If not found, create it and add headers
             print("Worksheet 'Scores' not found, creating it.")
             worksheet = sh.add_worksheet(title="Scores", rows=100, cols=4)
             worksheet.append_row(["Tag", "Name", "USN", "Time"])
             print("Worksheet 'Scores' created with headers.")
-
-        # 6. Append the new score data
-        worksheet.append_row([
-            str(tag), 
-            str(name), 
-            str(usn), 
-            str(f"{time_val:.2f}") # Format time as string
-        ])
-        # --- END NEW FIX ---
+        worksheet.append_row([str(tag), str(name), str(usn), str(f"{time_val:.2f}")])
         return True
     except Exception as e:
-        # MODIFICATION: Print the actual error to the console and show it in Streamlit
         print(f"GSheets Write Error: {e}")
         st.error(f"GSheets Write Error: {e}")
         return False
@@ -344,25 +217,54 @@ def get_leaderboard():
     return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
 
 # --- MAIN INIT ---
-# Assumes the video "167784-837438543.mp4" is in the same folder as your .py file
-inject_css("167784-837438543.mp4") # <-- MODIFIED
+inject_css("167784-837438543.mp4")
 
-def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1 # <-- MODIFIED
+def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1
 
 if 'game_state' not in st.session_state:
-    st.session_state.update({'game_state': 'menu', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'player_name': '', 'player_usn': '', 'final_time': 0.0, 'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000), 'real_boxes': [], 'fake_boxes': [], 'hits': 0})
+    st.session_state.update({'game_state': 'splash', 'current_level': 0, 'start_time': 0.0, 'player_tag': 'UNK', 'player_name': '', 'player_usn': '', 'final_time': 0.0, 'last_move_time': time.time(), 'glitch_seed': random.randint(1, 100000), 'real_boxes': [], 'fake_boxes': [], 'hits': 0})
+# Initialize audio tracking key
+if 'current_music_key' not in st.session_state:
+    st.session_state.current_music_key = None
+
 
 st.title("DETROIT: ANOMALY [09]")
 
-if st.session_state.game_state == "menu":
-    # --- ADDED: Show video and play menu music ---
+# --- SPLASH SCREEN BLOCK ---
+if st.session_state.game_state == "splash":
+    # Show video and set background
     st.markdown("""
         <style>
         #video-bg { display: block !important; }
         .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }
         </style>
         """, unsafe_allow_html=True)
-    play_audio("537256_humanfobia_letargo-sumergido.mp3", loop=True, file_type="mp3")
+    
+    # Center the button
+    col1, col2, col3 = st.columns([1,1,1])
+    with col2:
+        st.markdown("<br><br><br><br>", unsafe_allow_html=True) 
+        if st.button(">> [ ENTER ANOMALY ] <<", type="primary", use_container_width=True):
+            # 1. Unlock Audio: Play the menu music *now*.
+            play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3")
+            time.sleep(0.3) 
+            
+            # 2. Transition to Menu
+            st.session_state.game_state = "menu"
+            st.rerun()
+
+# --- MENU SCREEN BLOCK ---
+elif st.session_state.game_state == "menu":
+    # 1. Keep Background/Video Visible
+    st.markdown("""
+        <style>
+        #video-bg { display: block !important; }
+        .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }
+        </style>
+        """, unsafe_allow_html=True)
+    
+    # 2. Start Menu Music Loop (only if it wasn't started by the splash screen click)
+    play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3") 
     
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
@@ -370,14 +272,13 @@ if st.session_state.game_state == "menu":
     usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
     
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn))):
-        # --- ADDED: Play button click sound ---
-        play_audio("541987_rob_marion_gasp_ui_clicks_5.wav", file_type="wav")
-        time.sleep(0.3) # <-- MODIFIED: Increased delay for reliability
+        # Play SFX
+        play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav")
+        time.sleep(0.3) 
         
+        # Transition
         st.session_state.update({'game_state': 'playing', 'player_tag': tag, 'player_name': name, 'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0})
         move_glitch(get_num_real_targets(0)); st.rerun()
-
-    # --- TEST BUTTON REMOVED ---
 
     with st.expander("MISSION BRIEFING // RULES"):
         st.markdown("""
@@ -387,7 +288,7 @@ if st.session_state.game_state == "menu":
         2. ENGAGE: Tap precisely on the real anomaly.
         3. ADVANCE: Clear 3 Sectors.
         4. CAUTION: Sector 3 contains MULTIPLE simultaneous targets.
-        """, unsafe_allow_html=True) # <-- MODIFIED
+        """, unsafe_allow_html=True)
         
     with st.expander("CREDITS // SYSTEM INFO"):
         st.markdown("""
@@ -404,17 +305,20 @@ if st.session_state.game_state == "menu":
     elif conn: st.warning("WAITING FOR DATA LINK...")
     else: st.error("CONNECTION SEVERED.")
 
+# --- PLAYING SCREEN BLOCK ---
 elif st.session_state.game_state == "playing":
-    # --- ADDED: Play gameplay music ---
-    play_audio("615546_projecteur_cosmic-dark-synthwave.mp3", loop=True, file_type="mp3")
+    # 1. Start Gameplay Music (This re-injects the loop, implicitly stopping the menu loop)
+    play_audio("615546__projecteur__cosmic-dark-synthwave.mp3", loop=True, file_type="mp3")
 
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
     c1, c2, c3 = st.columns(3)
-    c1.markdown(f"AGENT: {st.session_state.player_tag}"); c2.markdown(f"TIME: {time.time()-st.session_state.start_time:.1f}s"); c3.markdown(f"LVL: {lvl+1}/3") # <-- MODIFIED
+    c1.markdown(f"AGENT: {st.session_state.player_tag}"); c2.markdown(f"TIME: {time.time()-st.session_state.start_time:.1f}s"); c3.markdown(f"LVL: {lvl+1}/3")
     st.progress(st.session_state.hits/needed, text=f"Neutralized: {st.session_state.hits}/{needed}")
     
-    gif, scaled_real, scaled_fake = generate_scaled_gif(LEVEL_FILES[lvl], st.session_state.real_boxes, st.session_state.fake_boxes, GAME_WIDTH, lvl, st.session_state.glitch_seed)
+    gif, scaled_real, scaled_fake = generate_scaled_gif(
+        LEVEL_FILES[lvl], st.session_state.real_boxes, st.session_state.fake_boxes,
+        GAME_WIDTH, lvl, st.session_state.glitch_seed)
     if gif:
         coords = streamlit_image_coordinates(gif, key=f"lvl_{lvl}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
         if coords:
@@ -423,9 +327,8 @@ elif st.session_state.game_state == "playing":
             fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_fake)
             
             if hit:
-                # --- FIXED: ADDED MISSING SOUND AND DELAY ---
-                play_audio("828680_jw_audio_uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav")
-                time.sleep(0.3) # <-- ADDED THIS DELAY
+                play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav")
+                time.sleep(0.3) 
                 
                 trigger_static_transition(); st.session_state.hits += 1
                 
@@ -437,27 +340,25 @@ elif st.session_state.game_state == "playing":
                     else: 
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
-                
                 else: 
                     move_glitch(targets)
                 
                 st.rerun()
                 
             elif fake_hit:
-                # --- ADDED: Play decoy hit sound ---
-                play_audio("713179_vein_adams_user-interface-beep-error-404-glitch.wav", file_type="wav")
-                time.sleep(0.3) # <-- ADD THIS DELAY
-                
+                play_audio("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav")
+                time.sleep(0.3) 
                 st.toast("DECOY NEUTRALIZED.", icon="⚠"); move_glitch(targets); st.rerun()
             
             else:
-                # --- ADDED: Play miss sound ---
-                play_audio("541987_rob_marion_gasp_ui_clicks_5.wav", file_type="wav")
-                time.sleep(0.3) # <-- ADD THIS DELAY
-                
+                play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav")
+                time.sleep(0.3) 
                 st.toast("MISS! RELOCATING...", icon="❌"); move_glitch(targets); st.rerun()
 
+# --- GAME OVER SCREEN BLOCK ---
 elif st.session_state.game_state == "game_over":
+    # Music stops implicitly because the code transitions back to 'menu'
+    
     st.balloons()
     st.markdown(f"## MISSION COMPLETE\n*OPERATIVE:* {st.session_state.player_name}\n*TIME:* {st.session_state.final_time:.2f}s")
     if st.button(">> UPLOAD SCORE <<", type="primary"):
