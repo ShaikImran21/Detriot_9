@@ -451,14 +451,22 @@ elif st.session_state.game_state == "playing":
             fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_fake)
             
             if hit:
-                # --- ADDED: Play real hit sound ---
-                play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav")
-                time.sleep(0.3) # <-- ADD THIS DELAY
+                # ... (all your hit logic) ...
                 
-                trigger_static_transition(); st.session_state.hits += 1
                 if st.session_state.hits >= needed:
-                    # ... (rest of logic)
-                else: move_glitch(targets)
+                    # ----> FIX THIS INDENTATION <----
+                    if lvl < 2: 
+                        st.session_state.current_level += 1
+                        st.session_state.hits = 0
+                        move_glitch(get_num_real_targets(st.session_state.current_level))
+                    else: 
+                        st.session_state.final_time = time.time() - st.session_state.start_time
+                        st.session_state.game_state = 'game_over'
+                    # ----> END OF FIX <----
+                
+                else: 
+                    move_glitch(targets)
+                
                 st.rerun()
                 
             elif fake_hit:
