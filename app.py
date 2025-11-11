@@ -184,12 +184,12 @@ def save_score(tag, name, usn, time_val):
         client = gspread.authorize(creds)
         
         # 3. Open the spreadsheet by its ID (also from secrets)
-        if "spreadsheet_id" not in creds_dict:
-            st.error("GSheets Error: 'spreadsheet_id' not found in secrets.")
+        if "spreadsheet" not in creds_dict:
+            st.error("GSheets Error: 'spreadsheet' (URL) not found in secrets.")
             return False
             
-        spreadsheet_id = creds_dict["spreadsheet_id"]
-        sh = client.open_by_key(spreadsheet_id)
+        spreadsheet_url = creds_dict["spreadsheet"]
+        sh = client.open_by_url(spreadsheet_url)
 
         try:
             # 4. Try to get the worksheet
