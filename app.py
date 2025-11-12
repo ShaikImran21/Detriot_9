@@ -33,33 +33,30 @@ def get_audio_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
+# --- FIXED: play_audio ---
 def play_audio(audio_file, loop=False, file_type="wav", audio_id="game-audio"):
     """
     Plays an audio file (wav or mp3) using Base64 embedding.
-    Improved version with better browser compatibility and persistence.
+    Improved version with better browser compatibility and Streamlit rerun handling.
     """
     try:
         audio_base64 = get_audio_base64(audio_file)
         if audio_base64:
             loop_attr = "loop" if loop else ""
-            # Use fixed ID for looping audio so it persists across reruns
             audio_html = f"""
-                <audio id="{audio_id}" autoplay {loop_attr} style="display:none;">
+                <audio id="{audio_id}" {loop_attr} style="display:none;">
                     <source src="data:audio/{file_type};base64,{audio_base64}" type="audio/{file_type}">
+                    Your browser does not support the audio element.
                 </audio>
                 <script>
-                    setTimeout(function() {{
-                        var audio = document.getElementById('{audio_id}');
-                        if (audio) {{
-                            // Only play if paused OR if duration is 0 (not loaded yet)
-                            if (audio.paused || audio.duration === 0) {{
-                                audio.volume = 0.7;
-                                audio.play().catch(function(error) {{
-                                    console.log("Audio autoplay prevented:", error);
-                                }});
-                            }}
-                        }}
-                    }}, 50);
+                    var audio = document.getElementById('{audio_id}');
+                    if (audio && audio.paused) {{
+                        // Check if audio is paused, then play
+                        audio.volume = 0.7;
+                        audio.play().catch(function(error) {{
+                            console.log("Audio autoplay prevented for {audio_id}:", error);
+                        }});
+                    }}
                 </script>
             """
             st.markdown(audio_html, unsafe_allow_html=True)
@@ -375,15 +372,16 @@ if st.session_state.game_state == "menu":
             st.session_state.menu_music_playing = False
             st.rerun()
     
-    # Play menu music only once after audio is enabled
-    if st.session_state.audio_enabled and not st.session_state.menu_music_playing:
-        play_audio("537256_humanfobia_letargo-sumergido.mp3", loop=True, file_type="mp3", audio_id="menu-music")
-        st.session_state.menu_music_playing = True
-        st.session_state.gameplay_music_playing = False
-    
-    # Keep playing menu music on every rerun to maintain it
-    if st.session_state.audio_enabled and st.session_state.menu_music_playing:
-        play_audio("537256_humanfobia_letargo-sumergido.mp3", loop=True, file_type="mp3", audio_id="menu-music")
+    # --- FIXED: Menu Music Logic ---
+    # Play menu music if audio is enabled
+    if st.session_state.audio_enabled:
+        # This MUST be called on every rerun to ensure the <audio> tag exists
+        play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3", audio_id="menu-music")
+        
+        # This logic is just for managing the switch between states
+        if not st.session_state.menu_music_playing:
+            st.session_state.menu_music_playing = True
+            st.session_state.gameplay_music_playing = False
     
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
@@ -391,7 +389,7 @@ if st.session_state.game_state == "menu":
     usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
     
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn) or not st.session_state.audio_enabled)):
-        play_audio("541987_rob_marion_gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
+        play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
         stop_all_audio()  # Stop menu music
         time.sleep(0.3)
         
@@ -443,15 +441,16 @@ elif st.session_state.game_state == "playing":
         </style>
         """, unsafe_allow_html=True)
     
-    # Play gameplay music only once
-    if not st.session_state.gameplay_music_playing:
-        play_audio("615546_projecteur_cosmic-dark-synthwave.mp3", loop=True, file_type="mp3", audio_id="gameplay-music")
-        st.session_state.gameplay_music_playing = True
-        st.session_state.menu_music_playing = False
-    
-    # Keep playing gameplay music on every rerun to maintain it
-    if st.session_state.gameplay_music_playing:
-        play_audio("615546_projecteur_cosmic-dark-synthwave.mp3", loop=True, file_type="mp3", audio_id="gameplay-music")
+    # --- FIXED: Gameplay Music Logic ---
+    # Play gameplay music
+    if st.session_state.audio_enabled:
+        # This MUST be called on every rerun
+        play_audio("615546__projecteur__cosmic-dark-synthwave.mp3", loop=True, file_type="mp3", audio_id="gameplay-music")
+        
+        # This logic is just for managing the switch between states
+        if not st.session_state.gameplay_music_playing:
+            st.session_state.gameplay_music_playing = True
+            st.session_state.menu_music_playing = False
 
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
@@ -470,7 +469,7 @@ elif st.session_state.game_state == "playing":
             fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_fake)
             
             if hit:
-                play_audio("828680_jw_audio_uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav", audio_id="hit-sound")
+                play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav", audio_id="hit-sound")
                 time.sleep(0.3)
                 
                 trigger_static_transition()
@@ -492,14 +491,14 @@ elif st.session_state.game_state == "playing":
                 st.rerun()
                 
             elif fake_hit:
-                play_audio("713179_vein_adams_user-interface-beep-error-404-glitch.wav", file_type="wav", audio_id="decoy-sound")
+                play_audio("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav", audio_id="decoy-sound")
                 time.sleep(0.3)
                 st.toast("DECOY NEUTRALIZED.", icon="⚠")
                 move_glitch(targets)
                 st.rerun()
             
             else:
-                play_audio("541987_rob_marion_gasp_ui_clicks_5.wav", file_type="wav", audio_id="miss-sound")
+                play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="miss-sound")
                 time.sleep(0.3)
                 st.toast("MISS! RELOCATING...", icon="❌")
                 move_glitch(targets)
