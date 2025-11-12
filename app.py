@@ -18,7 +18,7 @@ GAME_WIDTH = 1200
 # MAXIMUM TOLERANCE: Very easy to hit now, perfect for all mobile users.
 HIT_TOLERANCE = 150 
 
-LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png"] # <-- MODIFIED
+LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets.level3.png"] # <-- MODIFIED
 GLITCHES_PER_LEVEL = [3, 5, 7] # <-- MODIFIED
 
 # --- HELPER: ASSETS ---
@@ -35,10 +35,29 @@ def get_audio_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
+# --- NEW STATE MANAGEMENT FOR MUSIC ---
+if 'current_music' not in st.session_state:
+    st.session_state.current_music = None
+if 'music_placeholder' not in st.session_state:
+    st.session_state.music_placeholder = st.empty()
+
 def play_audio(audio_file, loop=False, file_type="wav"):
     """
-    Plays an audio file (wav or mp3) using Base64 embedding.
+    Plays an audio file. If loop=True, it manages the audio state.
     """
+    is_music = loop
+    
+    # --- MUSIC LOOP CONTROL ---
+    if is_music:
+        # If this music is already playing, do nothing.
+        if st.session_state.current_music == audio_file:
+            return
+        # If different music is playing, stop it.
+        if st.session_state.current_music is not None:
+            st.session_state.music_placeholder.empty()
+        # Set the new music track
+        st.session_state.current_music = audio_file
+    
     try:
         audio_base64 = get_audio_base64(audio_file)
         if audio_base64:
@@ -48,8 +67,13 @@ def play_audio(audio_file, loop=False, file_type="wav"):
                     <source src="data:audio/{file_type};base64,{audio_base64}" type="audio/{file_type}">
                 </audio>
             """
-            # Just inject the markdown, don't use st.empty()
-            st.markdown(audio_html, unsafe_allow_html=True)
+            
+            if is_music:
+                # If it's music, put it in the persistent placeholder
+                st.session_state.music_placeholder.markdown(audio_html, unsafe_allow_html=True)
+            else:
+                # If it's a short sound effect, just inject it.
+                st.markdown(audio_html, unsafe_allow_html=True)
     except:
         pass # Fail silently if file not found
 
@@ -130,9 +154,10 @@ def inject_css(video_file_path): # <-- MODIFIED: Pass in the video path
                 /* Add some padding to see the background better */
                 padding: 10px 5px; 
             }}
-            
-            /* ... (rest of CSS) ... */
 
+            /* REMOVED GLITCHY TITLE BACKGROUND */
+            /* ... (rest of your original h1::before CSS) ... */
+            
             /* GLOBAL TEXT GLITCH */
             h1, h2, h3, h4, h5, h6, p, label, span, div, button, a, input, .stDataFrame, .stMarkdown, .stExpander {{
                 animation: glitch-text 500ms infinite !important; color: #d0d0d0 !important;
@@ -173,7 +198,7 @@ def trigger_static_transition():
     with placeholder.container():
         st.markdown('<div style="position:fixed;top:0;left:0;width:100%;height:100%;background-color:#111;z-index:10000;"></div>', unsafe_allow_html=True)
         time.sleep(0.1)
-        g_url = "https.media.giphy.com/media/oEI9uBYSzLpBK/giphy.gif"
+        g_url = "https://media.giphy.com/media/oEI9uBYSzLpBK/giphy.gif"
         st.markdown(f'<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:url({g_url});background-size:cover;z-index:10001;opacity:0.8;mix-blend-mode:hard-light;"></div>', unsafe_allow_html=True)
         time.sleep(0.4)
     placeholder.empty()
@@ -265,7 +290,7 @@ def save_score(tag, name, usn, time_val):
         except gspread.exceptions.WorksheetNotFound:
             print("Worksheet 'Scores' not found, creating it.")
             worksheet = sh.add_worksheet(title="Scores", rows=100, cols=4)
-            works.append_row(["Tag", "Name", "USN", "Time"])
+            worksheet.append_row(["Tag", "Name", "USN", "Time"])
             print("Worksheet 'Scores' created with headers.")
         worksheet.append_row([str(tag), str(name), str(usn), str(f"{time_val:.2f}")])
         return True
@@ -296,7 +321,6 @@ inject_css("167784-837438543.mp4")
 def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1
 
 # --- SESSION STATE MANAGEMENT ---
-# Initialize session state for game and music control
 if 'game_state' not in st.session_state:
     st.session_state.game_state = 'splash' # START ON SPLASH
     st.session_state.current_level = 0
@@ -310,7 +334,11 @@ if 'game_state' not in st.session_state:
     st.session_state.real_boxes = []
     st.session_state.fake_boxes = []
     st.session_state.hits = 0
+if 'current_music' not in st.session_state:
     st.session_state.current_music = None # Music tracking
+if 'music_placeholder' not in st.session_state:
+    st.session_state.music_placeholder = st.empty() # Music container
+
 
 st.title("DETROIT: ANOMALY [09]")
 
@@ -330,7 +358,6 @@ if st.session_state.game_state == "splash":
             # This is the FIRST CLICK. Audio is now unlocked.
             # 1. Play the menu music
             play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3")
-            st.session_state.current_music = "menu" # Track that menu music is playing
             time.sleep(0.3) # Give audio time to start
             
             # 2. Transition to Menu
@@ -347,9 +374,8 @@ elif st.session_state.game_state == "menu":
         """, unsafe_allow_html=True)
     
     # Check if menu music needs to be started (e.g., coming from game_over)
-    if st.session_state.current_music != "menu":
+    if st.session_state.current_music != "537256__humanfobia__letargo-sumergido.mp3":
         play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3")
-        st.session_state.current_music = "menu"
     
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
@@ -391,9 +417,8 @@ elif st.session_state.game_state == "menu":
 # --- PLAYING SCREEN LOGIC ---
 elif st.session_state.game_state == "playing":
     # Start gameplay music (only if it's not already playing)
-    if st.session_state.current_music != "game":
+    if st.session_state.current_music != "615546__projecteur__cosmic-dark-synthwave.mp3":
         play_audio("615546__projecteur__cosmic-dark-synthwave.mp3", loop=True, file_type="mp3")
-        st.session_state.current_music = "game"
 
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
@@ -443,7 +468,9 @@ elif st.session_state.game_state == "playing":
 # --- GAME OVER SCREEN LOGIC ---
 elif st.session_state.game_state == "game_over":
     # Stop gameplay music
-    st.session_state.current_music = None 
+    if st.session_state.current_music is not None:
+        st.session_state.music_placeholder.empty()
+        st.session_state.current_music = None 
     
     st.balloons()
     st.markdown(f"## MISSION COMPLETE\n*OPERATIVE:* {st.session_state.player_name}\n*TIME:* {st.session_state.final_time:.2f}s")
