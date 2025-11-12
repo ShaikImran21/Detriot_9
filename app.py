@@ -50,11 +50,14 @@ def play_audio(audio_file, loop=False, file_type="wav", audio_id="game-audio"):
                 <script>
                     setTimeout(function() {{
                         var audio = document.getElementById('{audio_id}');
-                        if (audio && audio.paused) {{
-                            audio.volume = 0.7;
-                            audio.play().catch(function(error) {{
-                                console.log("Audio autoplay prevented:", error);
-                            }});
+                        if (audio) {{
+                            // Only play if paused OR if duration is 0 (not loaded yet)
+                            if (audio.paused || audio.duration === 0) {{
+                                audio.volume = 0.7;
+                                audio.play().catch(function(error) {{
+                                    console.log("Audio autoplay prevented:", error);
+                                }});
+                            }}
                         }}
                     }}, 50);
                 </script>
