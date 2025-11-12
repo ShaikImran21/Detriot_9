@@ -183,7 +183,7 @@ def trigger_static_transition():
     with placeholder.container():
         st.markdown('<div style="position:fixed;top:0;left:0;width:100%;height:100%;background-color:#111;z-index:10000;"></div>', unsafe_allow_html=True)
         time.sleep(0.1)
-        g_url = "https.media.giphy.com/media/oEI9uBYSzLpBK/giphy.gif"
+        g_url = "https://media.giphy.com/media/oEI9uBYSzLpBK/giphy.gif"
         st.markdown(f'<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:url({g_url});background-size:cover;z-index:10001;opacity:0.8;mix-blend-mode:hard-light;"></div>', unsafe_allow_html=True)
         time.sleep(0.4)
     placeholder.empty()
@@ -272,7 +272,7 @@ except: pass
 def save_score(tag, name, usn, time_val):
     try:
         scopes = [
-            "https.spreadsheets.google.com/feeds",
+            "https://spreadsheets.google.com/feeds",
             "https://www.googleapis.com/auth/drive"
         ]
         
@@ -329,23 +329,12 @@ inject_css("167784-837438543.mp4")
 
 def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1
 
-# --- ################## FIX: MOVED FUNCTION HERE ################## ---
-# This callback will run when user types in TAG or USN box
-def sync_upper_case():
-    # Make sure the values in session state are uppercase
-    if 'player_tag' in st.session_state:
-        st.session_state.player_tag = st.session_state.player_tag.upper()
-    if 'player_usn' in st.session_state:
-        st.session_state.player_usn = st.session_state.player_usn.upper()
-# --- ############################################################### ---
-
-
 if 'game_state' not in st.session_state:
     st.session_state.update({
         'game_state': 'menu', 
         'current_level': 0, 
         'start_time': 0.0, 
-        'player_tag': '', 
+        'player_tag': 'UNK', 
         'player_name': '', 
         'player_usn': '', 
         'final_time': 0.0, 
@@ -356,6 +345,8 @@ if 'game_state' not in st.session_state:
         'hits': 0,
         'menu_music_playing': False,
         'gameplay_music_playing': False,
+        # --- FIXED: Add placeholders for persistent audio ---
+        # This is the correct way: store the st.empty() object itself in state.
         'menu_music_placeholder': st.empty(),
         'game_music_placeholder': st.empty()
     })
@@ -375,69 +366,54 @@ if st.session_state.game_state == "menu":
     if 'audio_enabled' not in st.session_state:
         st.session_state.audio_enabled = False
     
+    # --- FIXED: "Enable Audio" button logic ---
     if not st.session_state.audio_enabled:
         st.warning("🔊 Audio is disabled. Click below to enable sound.")
         if st.button("🎵 ENABLE AUDIO", type="primary"):
             st.session_state.audio_enabled = True
+            # We play a sound *immediately* on this click to "unlock" 
+            # the browser's autoplay policy.
             play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="unlock-sound")
-            time.sleep(0.1) 
+            time.sleep(0.1) # Give it a tiny moment to register
             st.rerun()
     
-    # --- AUDIO FIX (from last time) ---
-    if st.session_state.audio_enabled and not st.session_state.menu_music_playing:
+    # --- FIXED: Menu Music Logic ---
+    # This logic now runs on *every* rerun (e.g., typing)
+    if st.session_state.audio_enabled:
         audio_html = play_background_music("537256__humanfobia__letargo-sumergido.mp3", file_type="mp3", audio_id="menu-music")
         if audio_html:
+            # We must re-fill the placeholder on every run to keep it on the page
             st.session_state.menu_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
-            st.session_state.menu_music_playing = True
-            st.session_state.gameplay_music_playing = False
+            
+            # Only set the flag the *first* time
+            if not st.session_state.menu_music_playing:
+                st.session_state.menu_music_playing = True
+                st.session_state.gameplay_music_playing = False
     
     st.markdown("### OPERATIVE DATA INPUT")
-
-    # --- TEXT INPUT FIX (from last time) ---
-    st.text_input(
-        ">> AGENT TAG (3 CHARS):", 
-        max_chars=3, 
-        key='player_tag',  # Binds to st.session_state.player_tag
-        on_change=sync_upper_case # Ensures it's uppercase
-    )
-    st.text_input(
-        ">> FULL NAME:", 
-        key='player_name'  # Binds to st.session_state.player_name
-    )
-    st.text_input(
-        ">> USN (e.g., 1MS22AI000):", 
-        key='player_usn',  # Binds to st.session_state.player_usn
-        on_change=sync_upper_case # Ensures it's uppercase
-    )
+    tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
+    name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
+    usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
     
-    # Read from session state for the check
-    current_tag = st.session_state.player_tag.strip()
-    
-    is_disabled = (
-        len(current_tag) != 3 or 
-        not st.session_state.player_name or 
-        not validate_usn(st.session_state.player_usn) or 
-        not st.session_state.audio_enabled
-    )
-    
-    if st.button(">> START SIMULATION <<", type="primary", disabled=is_disabled):
+    # --- FIXED: "Start Simulation" button logic ---
+    if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn) or not st.session_state.audio_enabled)):
         play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
         
-        st.session_state.menu_music_placeholder.empty() 
+        # --- FIXED: Clear the menu music player ---
+        st.session_state.menu_music_placeholder.empty() # This empties the *content*
         
         time.sleep(0.3)
         
-        # We can just update the tag here to the stripped version
-        st.session_state.player_tag = current_tag
-
         st.session_state.update({
             'game_state': 'playing', 
-            # player_tag, player_name, player_usn are already in session_state
+            'player_tag': tag, 
+            'player_name': name, 
+            'player_usn': usn, 
             'start_time': time.time(), 
             'current_level': 0, 
             'hits': 0,
-            'menu_music_playing': False, 
-            'gameplay_music_playing': False 
+            'menu_music_playing': False, # Reset flag
+            'gameplay_music_playing': False # Reset flag
         })
         move_glitch(get_num_real_targets(0))
         st.rerun()
@@ -476,18 +452,23 @@ elif st.session_state.game_state == "playing":
         </style>
         """, unsafe_allow_html=True)
     
-    # --- AUDIO FIX (from last time) ---
-    if st.session_state.audio_enabled and not st.session_state.gameplay_music_playing:
+    # --- FIXED: Gameplay Music Logic ---
+    # This also runs on every rerun (e.g., when clicking)
+    if st.session_state.audio_enabled:
         audio_html = play_background_music("615546__projecteur__cosmic-dark-synthwave.mp3", file_type="mp3", audio_id="gameplay-music")
         if audio_html:
+            # Re-fill the placeholder on every run
             st.session_state.game_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
-            st.session_state.gameplay_music_playing = True
-            st.session_state.menu_music_playing = False
+            
+            # Only set the flag the first time
+            if not st.session_state.gameplay_music_playing:
+                st.session_state.gameplay_music_playing = True
+                st.session_state.menu_music_playing = False
 
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
     c1, c2, c3 = st.columns(3)
-    c1.markdown(f"AGENT: {st.session_state.player_tag}") # Reads from state
+    c1.markdown(f"AGENT: {st.session_state.player_tag}")
     c2.markdown(f"TIME: {time.time()-st.session_state.start_time:.1f}s")
     c3.markdown(f"LVL: {lvl+1}/3")
     st.progress(st.session_state.hits/needed, text=f"Neutralized: {st.session_state.hits}/{needed}")
@@ -516,10 +497,11 @@ elif st.session_state.game_state == "playing":
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
                         
+                        # --- FIXED: Clear the game music player ---
                         st.session_state.game_music_placeholder.empty()
                         
-                        st.session_state.gameplay_music_playing = False
-                        st.session_state.menu_music_playing = False
+                        st.session_state.gameplay_music_playing = False # Reset flag
+                        st.session_state.menu_music_playing = False # Also reset menu flag
                 else: 
                     move_glitch(targets)
                 
@@ -550,11 +532,5 @@ elif st.session_state.game_state == "game_over":
                 st.error("UPLOAD FAILED.")
         time.sleep(1.5)
         st.session_state.game_state = 'menu'
-        st.session_state.menu_music_playing = False
-        
-        # Clear the old player data so the form is fresh
-        st.session_state.player_tag = ''
-        st.session_state.player_name = ''
-        st.session_state.player_usn = ''
-        
+        st.session_state.menu_music_playing = False # Reset flag so menu music will play
         st.rerun()
