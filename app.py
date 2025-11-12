@@ -179,7 +179,8 @@ def inject_css(video_file_path):
     """, unsafe_allow_html=True)
 
 def trigger_static_transition():
-    # play_audio("https://www.myinstants.com/media/sounds/static-noise.mp3", file_type="mp3", audio_id="static")
+    # Make sure you have this audio file or URL
+    play_audio("https://www.myinstants.com/media/sounds/static-noise.mp3", file_type="mp3", audio_id="static")
     placeholder = st.empty()
     with placeholder.container():
         st.markdown('<div style="position:fixed;top:0;left:0;width:100%;height:100%;background-color:#111;z-index:10000;"></div>', unsafe_allow_html=True)
@@ -379,22 +380,25 @@ if st.session_state.game_state == "menu":
             st.session_state.audio_enabled = True
             # We play a sound *immediately* on this click to "unlock" 
             # the browser's autoplay policy.
-            # play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="unlock-sound")
+            # --- AUDIO ENABLED ---
+            # Make sure you have this audio file locally
+            play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="unlock-sound")
             time.sleep(0.1) # Give it a tiny moment to register
             st.rerun()
     
     # --- Menu Music Logic (User's Version) ---
     if st.session_state.audio_enabled:
-        # audio_html = play_background_music("537256__humanfobia__letargo-sumergido.mp3", file_type="mp3", audio_id="menu-music")
-        # if audio_html:
-        #     # We must re-fill the placeholder on every run to keep it on the page
-        #     st.session_state.menu_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
+        # --- AUDIO ENABLED ---
+        # Make sure you have this audio file locally
+        audio_html = play_background_music("537256__humanfobia__letargo-sumergido.mp3", file_type="mp3", audio_id="menu-music")
+        if audio_html:
+            # We must re-fill the placeholder on every run to keep it on the page
+            st.session_state.menu_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
             
-        #     # Only set the flag the *first* time
-        #     if not st.session_state.menu_music_playing:
-        #         st.session_state.menu_music_playing = True
-        #         st.session_state.gameplay_music_playing = False
-        pass # Commented out to prevent file errors on my end
+            # Only set the flag the *first* time
+            if not st.session_state.menu_music_playing:
+                st.session_state.menu_music_playing = True
+                st.session_state.gameplay_music_playing = False
     
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
@@ -403,7 +407,9 @@ if st.session_state.game_state == "menu":
     
     # --- "Start Simulation" button logic (User's Version) ---
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn) or not st.session_state.audio_enabled)):
-        # play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
+        # --- AUDIO ENABLED ---
+        # Make sure you have this audio file locally
+        play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
         
         # --- Clear the menu music player (User's Version) ---
         st.session_state.menu_music_placeholder.empty() # This empties the *content*
@@ -460,16 +466,17 @@ elif st.session_state.game_state == "playing":
     
     # --- Gameplay Music Logic (User's Version) ---
     if st.session_state.audio_enabled:
-        # audio_html = play_background_music("615546__projecteur__cosmic-dark-synthwave.mp3", file_type="mp3", audio_id="gameplay-music")
-        # if audio_html:
-        #     # Re-fill the placeholder on every run
-        #     st.session_state.game_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
+        # --- AUDIO ENABLED ---
+        # Make sure you have this audio file locally
+        audio_html = play_background_music("615546__projecteur__cosmic-dark-synthwave.mp3", file_type="mp3", audio_id="gameplay-music")
+        if audio_html:
+            # Re-fill the placeholder on every run
+            st.session_state.game_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
             
-        #     # Only set the flag the first time
-        #     if not st.session_state.gameplay_music_playing:
-        #         st.session_state.gameplay_music_playing = True
-        #         st.session_state.menu_music_playing = False
-        pass # Commented out to prevent file errors on my end
+            # Only set the flag the first time
+            if not st.session_state.gameplay_music_playing:
+                st.session_state.gameplay_music_playing = True
+                st.session_state.menu_music_playing = False
 
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
@@ -491,7 +498,9 @@ elif st.session_state.game_state == "playing":
             fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_fake)
             
             if hit:
-                # play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav", audio_id="hit-sound")
+                # --- AUDIO ENABLED ---
+                # Make sure you have this audio file locally
+                play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav", audio_id="hit-sound")
                 time.sleep(0.3)
                 
                 trigger_static_transition()
@@ -517,14 +526,18 @@ elif st.session_state.game_state == "playing":
                 st.rerun()
                 
             elif fake_hit:
-                # play_audio("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav", audio_id="decoy-sound")
+                # --- AUDIO ENABLED ---
+                # Make sure you have this audio file locally
+                play_audio("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav", audio_id="decoy-sound")
                 time.sleep(0.3)
                 st.toast("DECOY NEUTRALIZED.", icon="⚠")
                 move_glitch(targets)
                 st.rerun()
             
             else:
-                # play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="miss-sound")
+                # --- AUDIO ENABLED ---
+                # Make sure you have this audio file locally
+                play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="miss-sound")
                 time.sleep(0.3)
                 st.toast("MISS! RELOCATING...", icon="❌")
                 move_glitch(targets)
