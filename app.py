@@ -370,6 +370,14 @@ if st.session_state.game_state == "menu":
         if st.button("🎵 ENABLE AUDIO", type="primary"):
             st.session_state.audio_enabled = True
             st.session_state.menu_music_playing = False
+            
+            # --- THIS IS THE FIX ---
+            # We play a sound *immediately* on this click to "unlock" 
+            # the browser's autoplay policy.
+            play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="unlock-sound")
+            time.sleep(0.1) # Give it a tiny moment to register
+            # --- END OF FIX ---
+            
             st.rerun()
     
     # --- FIXED: Menu Music Logic ---
