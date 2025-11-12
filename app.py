@@ -36,28 +36,26 @@ def get_audio_base64(bin_file):
 def play_audio(audio_file, loop=False, file_type="wav", audio_id="game-audio"):
     """
     Plays an audio file (wav or mp3) using Base64 embedding.
-    Improved version with better browser compatibility.
+    Improved version with better browser compatibility and Streamlit rerun handling.
     """
     try:
         audio_base64 = get_audio_base64(audio_file)
         if audio_base64:
             loop_attr = "loop" if loop else ""
-            # Use unique ID and add JS to force playback
-            unique_id = f"{audio_id}_{random.randint(1000,9999)}"
             audio_html = f"""
-                <audio id="{unique_id}" autoplay {loop_attr} style="display:none;">
+                <audio id="{audio_id}" {loop_attr} style="display:none;">
                     <source src="data:audio/{file_type};base64,{audio_base64}" type="audio/{file_type}">
+                    Your browser does not support the audio element.
                 </audio>
                 <script>
-                    setTimeout(function() {{
-                        var audio = document.getElementById('{unique_id}');
-                        if (audio) {{
-                            audio.volume = 0.7;
-                            audio.play().catch(function(error) {{
-                                console.log("Audio autoplay prevented:", error);
-                            }});
-                        }}
-                    }}, 50);
+                    var audio = document.getElementById('{audio_id}');
+                    if (audio && audio.paused) {{
+                        // Check if audio is paused, then play
+                        audio.volume = 0.7;
+                        audio.play().catch(function(error) {{
+                            console.log("Audio autoplay prevented for {audio_id}:", error);
+                        }});
+                    }}
                 </script>
             """
             st.markdown(audio_html, unsafe_allow_html=True)
@@ -374,8 +372,13 @@ if st.session_state.game_state == "menu":
             st.rerun()
     
     # Play menu music only once after audio is enabled
-    if st.session_state.audio_enabled and not st.session_state.menu_music_playing:
-        play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3", audio_id="menu-music")
+    # Play menu music if audio is enabled
+if st.session_state.audio_enabled:
+    # This MUST be called on every rerun to ensure the <audio> tag exists
+    play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3", audio_id="menu-music")
+    
+    # This logic is just for managing the switch between states
+    if not st.session_state.menu_music_playing:
         st.session_state.menu_music_playing = True
         st.session_state.gameplay_music_playing = False
     
@@ -438,8 +441,13 @@ elif st.session_state.game_state == "playing":
         """, unsafe_allow_html=True)
     
     # Play gameplay music only once
+    # Play gameplay music
+if st.session_state.audio_enabled:
+    # This MUST be called on every rerun
+    play_audio("615546__projecteur__cosmic-dark-synthwave.mp3", loop=True, file_type="mp3", audio_id="gameplay-music")
+    
+    # This logic is just for managing the switch between states
     if not st.session_state.gameplay_music_playing:
-        play_audio("615546__projecteur__cosmic-dark-synthwave.mp3", loop=True, file_type="mp3", audio_id="gameplay-music")
         st.session_state.gameplay_music_playing = True
         st.session_state.menu_music_playing = False
 
