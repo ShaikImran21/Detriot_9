@@ -452,18 +452,18 @@ elif st.session_state.game_state == "playing":
         </style>
         """, unsafe_allow_html=True)
     
-    # --- *** THIS IS THE FIX *** ---
-    # This entire block now only runs ONCE when the game starts.
-    # On subsequent reruns (clicks), this is skipped, so the music doesn't restart.
-    if st.session_state.audio_enabled and not st.session_state.gameplay_music_playing:
+    # --- FIXED: Gameplay Music Logic ---
+    # This also runs on every rerun (e.g., when clicking)
+    if st.session_state.audio_enabled:
         audio_html = play_background_music("615546__projecteur__cosmic-dark-synthwave.mp3", file_type="mp3", audio_id="gameplay-music")
         if audio_html:
-            # Fill the placeholder *once*
+            # Re-fill the placeholder on every run
             st.session_state.game_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
             
-            # Set the flag so this block is never run again
-            st.session_state.gameplay_music_playing = True
-            st.session_state.menu_music_playing = False
+            # Only set the flag the first time
+            if not st.session_state.gameplay_music_playing:
+                st.session_state.gameplay_music_playing = True
+                st.session_state.menu_music_playing = False
 
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
