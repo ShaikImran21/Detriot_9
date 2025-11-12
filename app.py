@@ -10,6 +10,7 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 import re
 import gspread
 from google.oauth2.service_account import Credentials
+from streamlit_js_eval import streamlit_js_eval, sync_session_state # <-- IMPORT NEW
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="wide", initial_sidebar_state="collapsed")
@@ -33,26 +34,117 @@ def get_audio_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- NEW: Background Music Function ---
-def play_background_music(audio_file, file_type="mp3", audio_id="bg-music"):
-    """
-    Plays a looping background music track.
-    """
-    try:
-        audio_base64 = get_audio_base64(audio_file)
-        if audio_base64:
-            audio_html = f"""
-                <audio id="{audio_id}" autoplay loop style="display:none;">
-                    <source src="data:audio/{file_type};base64,{audio_base64}" type="audio/{file_type}">
-                </audio>
-            """
-            return audio_html
-        return ""
-    except Exception as e:
-        print(f"Background audio error: {e}")
-        return ""
+# --- ★★★ NEW: JAVASCRIPT AUDIO CONTROL ★★★ ---
 
-# --- NEW: Sound Effect Function ---
+# 1. Store audio files in session state to pass to JS
+if 'audio_files' not in st.session_state:
+    st.session_state.audio_files = {
+        "menu": f"data:audio/mp3;base64,{get_audio_base64('537256__humanfobia__letargo-sumergido.mp3')}",
+        "game": f"data:audio/mp3;base64,{get_audio_base64('615546__projecteur__cosmic-dark-synthwave.mp3')}"
+    }
+
+# 2. This JS function creates/controls a persistent audio player
+# It lives outside the Streamlit re-run loop.
+JS_AUDIO_HANDLER = """
+<div id="audio-container" style="display:none;">
+    <audio id="menu-music" loop>
+        <source src="%s" type="audio/mp3">
+    </audio>
+    <audio id="gameplay-music" loop>
+        <source src="%s" type="audio/mp3">
+    </audio>
+</div>
+
+<script>
+(function() {
+    // Get the audio elements
+    const menuMusic = document.getElementById('menu-music');
+    const gameMusic = document.getElementById('gameplay-music');
+    let currentTrack = null; // To track which audio is playing
+
+    // Function to play a specific track
+    function playTrack(trackId) {
+        let newTrack = null;
+        if (trackId === 'menu') {
+            newTrack = menuMusic;
+        } else if (trackId === 'game') {
+            newTrack = gameMusic;
+        }
+
+        // Stop the *other* track if it's playing
+        if (currentTrack && currentTrack !== newTrack) {
+            currentTrack.pause();
+            currentTrack.currentTime = 0;
+        }
+
+        // Play the new track if it's not already playing
+        if (newTrack && newTrack.paused) {
+            newTrack.play().catch(e => console.error("Audio play failed:", e));
+        }
+        currentTrack = newTrack;
+    }
+
+    // Function to stop all tracks
+    function stopAll() {
+        if (menuMusic) menuMusic.pause();
+        if (gameMusic) gameMusic.pause();
+        currentTrack = null;
+    }
+
+    // Callback to handle messages from Streamlit
+    function handleStreamlitMessage(event) {
+        if (event.data.type === 'streamlit:setSessionState') {
+            if (event.data.key === 'audio_command') {
+                const command = event.data.value;
+                if (command === 'menu') {
+                    playTrack('menu');
+                } else if (command === 'game') {
+                    playTrack('game');
+                } else if (command === 'stop') {
+                    stopAll();
+                }
+                // Clear the command after processing
+                window.parent.Streamlit.setSessionState('audio_command', null);
+            }
+        }
+    }
+
+    // Add the message listener
+    window.parent.addEventListener('message', handleStreamlitMessage);
+
+    // Initial check in case session state was set on first load
+    const initialCommand = window.parent.Streamlit.getSessionState('audio_command');
+    if (initialCommand) {
+        handleStreamlitMessage({ data: { type: 'streamlit:setSessionState', key: 'audio_command', value: initialCommand } });
+    }
+})();
+</script>
+"""
+
+def init_audio_player():
+    """
+    Injects the persistent JavaScript audio player into the page.
+    """
+    # Check if a container already exists; if not, inject it.
+    # We use js_eval to run this script.
+    # This component injects the HTML into the <body>, outside the main re-run frame.
+    st.components.v1.html(
+        JS_AUDIO_HANDLER % (st.session_state.audio_files["menu"], st.session_state.audio_files["game"]),
+        height=0,
+        scrolling=False
+    )
+    
+# 3. This is the function we'll call from Python
+def set_audio_track(track_name):
+    """
+    Sets the audio track ('menu', 'game', 'stop') in session state.
+    The JavaScript listener will pick this up.
+    """
+    st.session_state.audio_command = track_name
+    # We need to sync the state so the JS can see it immediately
+    sync_session_state(keys=['audio_command'])
+
+# --- Sound Effect Function (Unchanged) ---
 def play_audio(audio_file, file_type="wav", audio_id=""):
     """
     Plays a one-shot sound effect.
@@ -73,7 +165,7 @@ def play_audio(audio_file, file_type="wav", audio_id=""):
         print(f"Audio error: {e}")
         pass
 
-# --- CSS: ULTRA GLITCH + MOBILE FIX ---
+# --- CSS: ULTRA GLITCH + MOBILE FIX (Unchanged) ---
 def inject_css(video_file_path):
     
     # 1. ENCODE THE VIDEO FILE
@@ -177,6 +269,11 @@ def inject_css(video_file_path):
         </style>
     """, unsafe_allow_html=True)
 
+# --- (Rest of your helper functions: trigger_static_transition, 
+# get_random_box, check_overlap, move_glitch, generate_mutating_frame, 
+# generate_scaled_gif, validate_usn, save_score, get_leaderboard ... 
+# these are all unchanged and correct) ---
+
 def trigger_static_transition():
     play_audio("https://www.myinstants.com/media/sounds/static-noise.mp3", file_type="mp3", audio_id="static")
     placeholder = st.empty()
@@ -272,8 +369,8 @@ except: pass
 def save_score(tag, name, usn, time_val):
     try:
         scopes = [
-            "https://spreadsheets.google.com/feeds",
-            "https://www.googleapis.com/auth/drive"
+            "https.://spreadsheets.google.com/feeds",
+            "https.://www.googleapis.com/auth/drive"
         ]
         
         creds_dict = st.secrets["connections"]["gsheets"]
@@ -293,7 +390,7 @@ def save_score(tag, name, usn, time_val):
         except gspread.exceptions.WorksheetNotFound:
             print("Worksheet 'Scores' not found, creating it.")
             worksheet = sh.add_worksheet(title="Scores", rows=100, cols=4)
-            works.append_row(["Tag", "Name", "USN", "Time"])
+            worksheet.append_row(["Tag", "Name", "USN", "Time"])
             print("Worksheet 'Scores' created with headers.")
 
         worksheet.append_row([
@@ -327,8 +424,6 @@ def get_leaderboard():
 # --- MAIN INIT ---
 inject_css("167784-837438543.mp4")
 
-def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1
-
 if 'game_state' not in st.session_state:
     st.session_state.update({
         'game_state': 'menu', 
@@ -343,12 +438,16 @@ if 'game_state' not in st.session_state:
         'real_boxes': [], 
         'fake_boxes': [], 
         'hits': 0,
-        'menu_music_playing': False,
-        'gameplay_music_playing': False,
-        # --- FIXED: Add placeholders for persistent audio ---
-        'menu_music_placeholder': st.empty(),
-        'game_music_placeholder': st.empty()
+        'audio_enabled': False,
+        'audio_command': None, # <-- NEW: State for JS communication
+        'audio_initialized': False # <-- NEW: Flag to inject player once
     })
+
+# --- ★★★ NEW: Inject the audio player ONCE ---
+if not st.session_state.audio_initialized:
+    init_audio_player()
+    st.session_state.audio_initialized = True
+
 
 st.title("DETROIT: ANOMALY [09]")
 
@@ -361,31 +460,23 @@ if st.session_state.game_state == "menu":
         </style>
         """, unsafe_allow_html=True)
     
-    # Add audio initialization button
-    if 'audio_enabled' not in st.session_state:
-        st.session_state.audio_enabled = False
-    
     # --- "Enable Audio" button logic ---
     if not st.session_state.audio_enabled:
         st.warning("🔊 Audio is disabled. Click below to enable sound.")
         if st.button("🎵 ENABLE AUDIO", type="primary"):
             st.session_state.audio_enabled = True
-            # We play a sound *immediately* on this click to "unlock" 
-            # the browser's autoplay policy.
             play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="unlock-sound")
-            time.sleep(0.1) # Give it a tiny moment to register
-            st.rerun()
-    
-    # --- FIXED: Menu Music Logic ---
-    # This logic now runs only ONCE when audio is enabled and music isn't playing
-    if st.session_state.audio_enabled and not st.session_state.menu_music_playing:
-        audio_html = play_background_music("537256__humanfobia__letargo-sumergido.mp3", file_type="mp3", audio_id="menu-music")
-        if audio_html:
-            # Place the audio player in its persistent placeholder ONCE.
-            st.session_state.menu_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
-            st.session_state.menu_music_playing = True # Set the flag
-            st.session_state.gameplay_music_playing = False
             
+            # --- ★★★ NEW: Send "play menu" command ---
+            set_audio_track("menu") 
+            
+            time.sleep(0.1)
+            st.rerun()
+    else:
+        # --- ★★★ NEW: If audio is on, ensure menu music is set ---
+        # This will run on every re-run of the menu page
+        set_audio_track("menu")
+
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
     name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
@@ -395,8 +486,8 @@ if st.session_state.game_state == "menu":
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn) or not st.session_state.audio_enabled)):
         play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
         
-        # Clear the menu music player
-        st.session_state.menu_music_placeholder.empty() 
+        # --- ★★★ NEW: Send "play game" command ---
+        set_audio_track("game")
         
         time.sleep(0.3)
         
@@ -407,9 +498,7 @@ if st.session_state.game_state == "menu":
             'player_usn': usn, 
             'start_time': time.time(), 
             'current_level': 0, 
-            'hits': 0,
-            'menu_music_playing': False, # Reset flag
-            'gameplay_music_playing': False # Reset flag
+            'hits': 0
         })
         move_glitch(get_num_real_targets(0))
         st.rerun()
@@ -448,15 +537,10 @@ elif st.session_state.game_state == "playing":
         </style>
         """, unsafe_allow_html=True)
     
-    # --- FIXED: Gameplay Music Logic ---
-    # This logic now runs only ONCE when the game starts
-    if st.session_state.audio_enabled and not st.session_state.gameplay_music_playing:
-        audio_html = play_background_music("615546__projecteur__cosmic-dark-synthwave.mp3", file_type="mp3", audio_id="gameplay-music")
-        if audio_html:
-            # Place the game music in its persistent placeholder ONCE.
-            st.session_state.game_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
-            st.session_state.gameplay_music_playing = True
-            st.session_state.menu_music_playing = False
+    # --- ★★★ NEW: Ensure game music is set ---
+    # This runs on every re-run of the playing page (e.g., clicks)
+    if st.session_state.audio_enabled:
+        set_audio_track("game")
 
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
@@ -490,11 +574,8 @@ elif st.session_state.game_state == "playing":
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
                         
-                        # Clear the game music player
-                        st.session_state.game_music_placeholder.empty()
-                        
-                        st.session_state.gameplay_music_playing = False # Reset flag
-                        st.session_state.menu_music_playing = False # Also reset menu flag
+                        # --- ★★★ NEW: Send "stop" command ---
+                        set_audio_track("stop") 
                 else: 
                     move_glitch(targets)
                 
@@ -515,6 +596,10 @@ elif st.session_state.game_state == "playing":
                 st.rerun()
 
 elif st.session_state.game_state == "game_over":
+    # --- ★★★ NEW: Ensure music is stopped ---
+    if st.session_state.audio_enabled:
+        set_audio_track("stop")
+        
     st.balloons()
     st.markdown(f"## MISSION COMPLETE\n*OPERATIVE:* {st.session_state.player_name}\n*TIME:* {st.session_state.final_time:.2f}s")
     if st.button(">> UPLOAD SCORE <<", type="primary"):
@@ -525,5 +610,8 @@ elif st.session_state.game_state == "game_over":
                 st.error("UPLOAD FAILED.")
         time.sleep(1.5)
         st.session_state.game_state = 'menu'
-        st.session_state.menu_music_playing = False # Reset flag so menu music will play
+        
+        # --- ★★★ NEW: Send "play menu" command for return ---
+        set_audio_track("menu")
+        
         st.rerun()
