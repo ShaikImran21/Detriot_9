@@ -33,11 +33,10 @@ def get_audio_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- FIXED: Background Music Function ---
-# This function creates the HTML for a looping <audio> tag with autoplay.
+# --- NEW: Background Music Function ---
 def play_background_music(audio_file, file_type="mp3", audio_id="bg-music"):
     """
-    Returns the HTML for a looping, autoplaying audio element.
+    Plays a looping background music track.
     """
     try:
         audio_base64 = get_audio_base64(audio_file)
@@ -53,9 +52,8 @@ def play_background_music(audio_file, file_type="mp3", audio_id="bg-music"):
         print(f"Background audio error: {e}")
         return ""
 
-# --- FIXED: Sound Effect Function ---
-# This plays a one-shot sound. It's re-triggerable.
-def play_sound_effect(audio_file, file_type="wav", audio_id=""):
+# --- NEW: Sound Effect Function ---
+def play_audio(audio_file, file_type="wav", audio_id=""):
     """
     Plays a one-shot sound effect.
     Uses a unique ID to be re-triggerable.
@@ -180,7 +178,7 @@ def inject_css(video_file_path):
     """, unsafe_allow_html=True)
 
 def trigger_static_transition():
-    play_sound_effect("https://www.myinstants.com/media/sounds/static-noise.mp3", file_type="mp3", audio_id="static")
+    play_audio("https://www.myinstants.com/media/sounds/static-noise.mp3", file_type="mp3", audio_id="static")
     placeholder = st.empty()
     with placeholder.container():
         st.markdown('<div style="position:fixed;top:0;left:0;width:100%;height:100%;background-color:#111;z-index:10000;"></div>', unsafe_allow_html=True)
@@ -274,8 +272,8 @@ except: pass
 def save_score(tag, name, usn, time_val):
     try:
         scopes = [
-            "https.spreadsheets.google.com/feeds",
-            "https.www.googleapis.com/auth/drive"
+            "https://spreadsheets.google.com/feeds",
+            "https://www.googleapis.com/auth/drive"
         ]
         
         creds_dict = st.secrets["connections"]["gsheets"]
@@ -345,7 +343,6 @@ if 'game_state' not in st.session_state:
         'real_boxes': [], 
         'fake_boxes': [], 
         'hits': 0,
-        'audio_enabled': False,
         'menu_music_playing': False,
         'gameplay_music_playing': False,
         # --- FIXED: Add placeholders for persistent audio ---
@@ -375,14 +372,11 @@ if st.session_state.game_state == "menu":
             st.session_state.audio_enabled = True
             # We play a sound *immediately* on this click to "unlock" 
             # the browser's autoplay policy.
-            play_sound_effect("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="unlock-sound")
-            # --- !! CRITICAL FIX !! ---
-            # DO NOT st.rerun() here. Let the script continue
-            # so the music loads in the *same* click-initiated run.
+            play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="unlock-sound")
+            time.sleep(0.1) # Give it a tiny moment to register
+            st.rerun()
     
     # --- FIXED: Menu Music Logic ---
-    # This block will now run on the *same script* as the button click,
-    # or on any subsequent rerun (like typing).
     if st.session_state.audio_enabled and not st.session_state.menu_music_playing:
         audio_html = play_background_music("537256__humanfobia__letargo-sumergido.mp3", file_type="mp3", audio_id="menu-music")
         if audio_html:
@@ -398,9 +392,9 @@ if st.session_state.game_state == "menu":
     
     # --- FIXED: "Start Simulation" button logic ---
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn) or not st.session_state.audio_enabled)):
-        play_sound_effect("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
+        play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
         
-        # --- FIXED: Clear the menu music placeholder ---
+        # --- FIXED: Clear the menu music player ---
         st.session_state.menu_music_placeholder.empty()
         
         time.sleep(0.3)
@@ -476,10 +470,10 @@ elif st.session_state.game_state == "playing":
         if coords:
             cx, cy = coords['x'], coords['y']
             hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_real)
-            fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_OLERANCE) for x1,y1,x2,y2 in scaled_fake)
+            fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_fake)
             
             if hit:
-                play_sound_effect("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav", audio_id="hit-sound")
+                play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav", audio_id="hit-sound")
                 time.sleep(0.3)
                 
                 trigger_static_transition()
@@ -494,7 +488,7 @@ elif st.session_state.game_state == "playing":
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
                         
-                        # --- FIXED: Clear the game music placeholder ---
+                        # --- FIXED: Clear the game music player ---
                         st.session_state.game_music_placeholder.empty()
                         
                         st.session_state.gameplay_music_playing = False # Reset flag
@@ -504,14 +498,14 @@ elif st.session_state.game_state == "playing":
                 st.rerun()
                 
             elif fake_hit:
-                play_sound_effect("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav", audio_id="decoy-sound")
+                play_audio("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav", audio_id="decoy-sound")
                 time.sleep(0.3)
                 st.toast("DECOY NEUTRALIZED.", icon="⚠")
                 move_glitch(targets)
                 st.rerun()
             
             else:
-                play_sound_effect("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="miss-sound")
+                play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="miss-sound")
                 time.sleep(0.3)
                 st.toast("MISS! RELOCATING...", icon="❌")
                 move_glitch(targets)
