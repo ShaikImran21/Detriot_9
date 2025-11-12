@@ -15,12 +15,9 @@ from google.oauth2.service_account import Credentials
 st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="wide", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 1200
-# --- FIXED: Define 16:9 height and reduce tolerance ---
-GAME_HEIGHT = int(GAME_WIDTH * (9 / 16)) # This is 675
-HIT_TOLERANCE = 25 # 150 was too large and hitting decoys
+HIT_TOLERANCE = 150
 
-# --- FIXED: Use your uploaded filenames ---
-LEVEL_FILES = ["level1.png", "level2.png", "level3.png"]
+LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png"]
 GLITCHES_PER_LEVEL = [3, 5, 7]
 
 # --- HELPER: ASSETS ---
@@ -29,13 +26,14 @@ def get_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- AUDIO FUNCTIONS (User's Version) ---
+# --- AUDIO FUNCTIONS ---
 @st.cache_data(show_spinner=False, persist="disk")
 def get_audio_base64(bin_file):
     try:
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
+# --- NEW: Background Music Function ---
 def play_background_music(audio_file, file_type="mp3", audio_id="bg-music"):
     """
     Plays a looping background music track.
@@ -54,6 +52,7 @@ def play_background_music(audio_file, file_type="mp3", audio_id="bg-music"):
         print(f"Background audio error: {e}")
         return ""
 
+# --- NEW: Sound Effect Function ---
 def play_audio(audio_file, file_type="wav", audio_id=""):
     """
     Plays a one-shot sound effect.
@@ -179,7 +178,6 @@ def inject_css(video_file_path):
     """, unsafe_allow_html=True)
 
 def trigger_static_transition():
-    # Make sure you have this audio file or URL
     play_audio("https://www.myinstants.com/media/sounds/static-noise.mp3", file_type="mp3", audio_id="static")
     placeholder = st.empty()
     with placeholder.container():
@@ -191,13 +189,11 @@ def trigger_static_transition():
     placeholder.empty()
 
 # --- SMART GLITCH GENERATION ---
-# --- FIXED: Use GAME_WIDTH and GAME_HEIGHT ---
 def get_random_box(level, is_fake=False):
     if is_fake: max_s, min_s = max(180 - level*15, 60), max(70 - level*5, 40)
     else: max_s, min_s = max(150 - level*20, 30), min(max(50 - level*10, 15), max(150 - level*20, 30))
     w, h = random.randint(min_s, max_s), random.randint(min_s, max_s)
-    # Use GAME_WIDTH and GAME_HEIGHT instead of 1024
-    return (random.randint(50, GAME_WIDTH-w-50), random.randint(50, GAME_HEIGHT-h-50), w, h)
+    return (random.randint(50, 1024-w-50), random.randint(50, 1024-h-50), w, h)
 
 def check_overlap(box1, box2, buffer=20):
     b1_x1, b1_y1, b1_x2, b1_y2 = box1[0], box1[1], box1[0]+box1[2], box1[1]+box1[3]
@@ -240,32 +236,34 @@ def generate_mutating_frame(base_img, boxes, is_fake=False):
             except: pass
     return frame
 
-# --- FIXED: Corrected scaling logic ---
+@st.cache_data(show_spinner=False, persist="disk")
 @st.cache_data(show_spinner=False, persist="disk")
 def generate_scaled_gif(img_path, real_boxes_orig, fake_boxes_orig, target_width, level_idx, glitch_seed):
     try:
         random.seed(glitch_seed)
         base_img = Image.open(img_path).convert("RGB")
         
-        # Calculate 16:9 aspect ratio height
-        target_height = GAME_HEIGHT # Use the global variable
+        # Calculate 16:9 aspect ratio
+        target_height = int(target_width * (9 / 16))
+        sf_width = target_width / base_img.width
+        sf_height = target_height / base_img.height
         
-        # Resize the base image *once* to the final display size
         base_img = base_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
         
-        # NO SCALING NEEDED for boxes, as they are now generated
-        # in the correct coordinate space (0-1200, 0-675)
+        scaled_real = [(int(x1*sf_width), int(y1*sf_height), int(x2*sf_width), int(y2*sf_height)) for x1,y1,x2,y2 in real_boxes_orig]
+        scaled_fake = [(int(x1*sf_width), int(y1*sf_height), int(x2*sf_width), int(y2*sf_height)) for x1,y1,x2,y2 in fake_boxes_orig]
         
         frames = [base_img.copy() for _ in range(15)]
         for _ in range(8):
-            # Apply glitches using the original (now correct) box coordinates
-            frames.append(generate_mutating_frame(generate_mutating_frame(base_img, real_boxes_orig, False), fake_boxes_orig, True))
-        
+            
+            # --- THIS IS THE FIX ---
+            # Use the *scaled* boxes to generate the frames, not the original ones.
+            frames.append(generate_mutating_frame(generate_mutating_frame(base_img, scaled_real, False), scaled_fake, True))
+            # --- END FIX ---
+
         temp_file = f"/tmp/lvl_{level_idx}_{glitch_seed}.gif"
         frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15+[70]*8, loop=0)
-        
-        # Return the *original* boxes, as they are the correct "scaled" boxes
-        return temp_file, real_boxes_orig, fake_boxes_orig
+        return temp_file, scaled_real, scaled_fake
     
     except: return None, [], []
 
@@ -332,7 +330,6 @@ def get_leaderboard():
     return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
 
 # --- MAIN INIT ---
-# Make sure you have this video file
 inject_css("167784-837438543.mp4")
 
 def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1
@@ -353,7 +350,8 @@ if 'game_state' not in st.session_state:
         'hits': 0,
         'menu_music_playing': False,
         'gameplay_music_playing': False,
-        # --- This is your audio placeholder logic ---
+        # --- FIXED: Add placeholders for persistent audio ---
+        # This is the correct way: store the st.empty() object itself in state.
         'menu_music_placeholder': st.empty(),
         'game_music_placeholder': st.empty()
     })
@@ -373,23 +371,20 @@ if st.session_state.game_state == "menu":
     if 'audio_enabled' not in st.session_state:
         st.session_state.audio_enabled = False
     
-    # --- "Enable Audio" button logic (User's Version) ---
+    # --- FIXED: "Enable Audio" button logic ---
     if not st.session_state.audio_enabled:
         st.warning("🔊 Audio is disabled. Click below to enable sound.")
         if st.button("🎵 ENABLE AUDIO", type="primary"):
             st.session_state.audio_enabled = True
             # We play a sound *immediately* on this click to "unlock" 
             # the browser's autoplay policy.
-            # --- AUDIO ENABLED ---
-            # Make sure you have this audio file locally
             play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="unlock-sound")
             time.sleep(0.1) # Give it a tiny moment to register
             st.rerun()
     
-    # --- Menu Music Logic (User's Version) ---
+    # --- FIXED: Menu Music Logic ---
+    # This logic now runs on *every* rerun (e.g., typing)
     if st.session_state.audio_enabled:
-        # --- AUDIO ENABLED ---
-        # Make sure you have this audio file locally
         audio_html = play_background_music("537256__humanfobia__letargo-sumergido.mp3", file_type="mp3", audio_id="menu-music")
         if audio_html:
             # We must re-fill the placeholder on every run to keep it on the page
@@ -405,13 +400,11 @@ if st.session_state.game_state == "menu":
     name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
     usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
     
-    # --- "Start Simulation" button logic (User's Version) ---
+    # --- FIXED: "Start Simulation" button logic ---
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn) or not st.session_state.audio_enabled)):
-        # --- AUDIO ENABLED ---
-        # Make sure you have this audio file locally
         play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
         
-        # --- Clear the menu music player (User's Version) ---
+        # --- FIXED: Clear the menu music player ---
         st.session_state.menu_music_placeholder.empty() # This empties the *content*
         
         time.sleep(0.3)
@@ -464,10 +457,9 @@ elif st.session_state.game_state == "playing":
         </style>
         """, unsafe_allow_html=True)
     
-    # --- Gameplay Music Logic (User's Version) ---
+    # --- FIXED: Gameplay Music Logic ---
+    # This also runs on every rerun (e.g., when clicking)
     if st.session_state.audio_enabled:
-        # --- AUDIO ENABLED ---
-        # Make sure you have this audio file locally
         audio_html = play_background_music("615546__projecteur__cosmic-dark-synthwave.mp3", file_type="mp3", audio_id="gameplay-music")
         if audio_html:
             # Re-fill the placeholder on every run
@@ -486,20 +478,15 @@ elif st.session_state.game_state == "playing":
     c3.markdown(f"LVL: {lvl+1}/3")
     st.progress(st.session_state.hits/needed, text=f"Neutralized: {st.session_state.hits}/{needed}")
     
-    # --- FIXED: This call now uses the corrected coordinate logic ---
     gif, scaled_real, scaled_fake = generate_scaled_gif(LEVEL_FILES[lvl], st.session_state.real_boxes, st.session_state.fake_boxes, GAME_WIDTH, lvl, st.session_state.glitch_seed)
-    
     if gif:
         coords = streamlit_image_coordinates(gif, key=f"lvl_{lvl}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
         if coords:
             cx, cy = coords['x'], coords['y']
-            # --- FIXED: Hit detection is now precise ---
             hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_real)
             fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_fake)
             
             if hit:
-                # --- AUDIO ENABLED ---
-                # Make sure you have this audio file locally
                 play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav", audio_id="hit-sound")
                 time.sleep(0.3)
                 
@@ -515,7 +502,7 @@ elif st.session_state.game_state == "playing":
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
                         
-                        # --- Clear the game music player (User's Version) ---
+                        # --- FIXED: Clear the game music player ---
                         st.session_state.game_music_placeholder.empty()
                         
                         st.session_state.gameplay_music_playing = False # Reset flag
@@ -526,8 +513,6 @@ elif st.session_state.game_state == "playing":
                 st.rerun()
                 
             elif fake_hit:
-                # --- AUDIO ENABLED ---
-                # Make sure you have this audio file locally
                 play_audio("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav", audio_id="decoy-sound")
                 time.sleep(0.3)
                 st.toast("DECOY NEUTRALIZED.", icon="⚠")
@@ -535,8 +520,6 @@ elif st.session_state.game_state == "playing":
                 st.rerun()
             
             else:
-                # --- AUDIO ENABLED ---
-                # Make sure you have this audio file locally
                 play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="miss-sound")
                 time.sleep(0.3)
                 st.toast("MISS! RELOCATING...", icon="❌")
