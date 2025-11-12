@@ -293,7 +293,7 @@ def save_score(tag, name, usn, time_val):
         except gspread.exceptions.WorksheetNotFound:
             print("Worksheet 'Scores' not found, creating it.")
             worksheet = sh.add_worksheet(title="Scores", rows=100, cols=4)
-            worksheet.append_row(["Tag", "Name", "USN", "Time"])
+            works.append_row(["Tag", "Name", "USN", "Time"])
             print("Worksheet 'Scores' created with headers.")
 
         worksheet.append_row([
@@ -377,18 +377,19 @@ if st.session_state.game_state == "menu":
             time.sleep(0.1) # Give it a tiny moment to register
             st.rerun()
     
-    # --- FIXED: Menu Music Logic ---
-    # This logic now runs on *every* rerun (e.g., typing)
-    if st.session_state.audio_enabled:
+    # --- ###################### FIX #1 START ###################### ---
+    # We check if audio is enabled AND if music is NOT already playing.
+    # This prevents the audio tag from being re-added on every rerun.
+    if st.session_state.audio_enabled and not st.session_state.menu_music_playing:
         audio_html = play_background_music("537256__humanfobia__letargo-sumergido.mp3", file_type="mp3", audio_id="menu-music")
         if audio_html:
-            # We must re-fill the placeholder on every run to keep it on the page
+            # This markdown command will now only run ONCE
             st.session_state.menu_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
             
-            # Only set the flag the *first* time
-            if not st.session_state.menu_music_playing:
-                st.session_state.menu_music_playing = True
-                st.session_state.gameplay_music_playing = False
+            # Set the flag *after* adding the music
+            st.session_state.menu_music_playing = True
+            st.session_state.gameplay_music_playing = False
+    # --- ###################### FIX #1 END ######################## ---
     
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
@@ -452,18 +453,19 @@ elif st.session_state.game_state == "playing":
         </style>
         """, unsafe_allow_html=True)
     
-    # --- FIXED: Gameplay Music Logic ---
-    # This also runs on every rerun (e.g., when clicking)
-    if st.session_state.audio_enabled:
+    # --- ###################### FIX #2 START ###################### ---
+    # We check if audio is enabled AND if music is NOT already playing.
+    # This prevents the audio tag from being re-added on every click.
+    if st.session_state.audio_enabled and not st.session_state.gameplay_music_playing:
         audio_html = play_background_music("615546__projecteur__cosmic-dark-synthwave.mp3", file_type="mp3", audio_id="gameplay-music")
         if audio_html:
-            # Re-fill the placeholder on every run
+            # This markdown command will now only run ONCE
             st.session_state.game_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
             
-            # Only set the flag the first time
-            if not st.session_state.gameplay_music_playing:
-                st.session_state.gameplay_music_playing = True
-                st.session_state.menu_music_playing = False
+            # Set the flag *after* adding the music
+            st.session_state.gameplay_music_playing = True
+            st.session_state.menu_music_playing = False
+    # --- ###################### FIX #2 END ######################## ---
 
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
