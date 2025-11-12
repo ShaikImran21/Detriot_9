@@ -394,7 +394,7 @@ if st.session_state.game_state == "menu":
             if not st.session_state.menu_music_playing:
                 st.session_state.menu_music_playing = True
                 st.session_state.gameplay_music_playing = False
-    st.title("DETROIT: ANOMALY [09]")
+    
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
     name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
