@@ -33,27 +33,37 @@ def get_audio_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- NEW: Background Music Function ---
+# --- FIXED: Background Music Function ---
 def play_background_music(audio_file, file_type="mp3", audio_id="bg-music"):
     """
-    Plays a looping background music track.
+    Renders a looping audio player.
+    This is called on EVERY rerun, but the JS logic prevents it
+    from restarting if it's already playing.
     """
     try:
         audio_base64 = get_audio_base64(audio_file)
         if audio_base64:
             audio_html = f"""
-                <audio id="{audio_id}" autoplay loop style="display:none;">
+                <audio id="{audio_id}" loop style="display:none;">
                     <source src="data:audio/{file_type};base64,{audio_base64}" type="audio/{file_type}">
                 </audio>
+                <script>
+                    var audio = document.getElementById('{audio_id}');
+                    if (audio && audio.paused) {{
+                        audio.volume = 0.7;
+                        audio.play().catch(function(error) {{
+                            console.log("Autoplay prevented for {audio_id}:", error);
+                        }});
+                    }}
+                </script>
             """
-            return audio_html
-        return ""
+            st.markdown(audio_html, unsafe_allow_html=True)
     except Exception as e:
         print(f"Background audio error: {e}")
-        return ""
+        pass
 
-# --- NEW: Sound Effect Function ---
-def play_audio(audio_file, file_type="wav", audio_id=""):
+# --- FIXED: Sound Effect Function ---
+def play_sound_effect(audio_file, file_type="wav", audio_id="sfx"):
     """
     Plays a one-shot sound effect.
     Uses a unique ID to be re-triggerable.
@@ -61,7 +71,6 @@ def play_audio(audio_file, file_type="wav", audio_id=""):
     try:
         audio_base64 = get_audio_base64(audio_file)
         if audio_base64:
-            # Use a unique key to force re-rendering and re-playing
             unique_id = f"{audio_id}_{random.randint(1000,9999)}"
             audio_html = f"""
                 <audio id="{unique_id}" autoplay style="display:none;">
@@ -70,8 +79,23 @@ def play_audio(audio_file, file_type="wav", audio_id=""):
             """
             st.markdown(audio_html, unsafe_allow_html=True)
     except Exception as e:
-        print(f"Audio error: {e}")
+        print(f"Sound effect error: {e}")
         pass
+
+# --- FIXED: Stop Music Function ---
+def stop_background_music(audio_id):
+    """
+    Explicitly stops and resets a background music track.
+    """
+    st.markdown(f"""
+        <script>
+            var audio = document.getElementById('{audio_id}');
+            if (audio) {{
+                audio.pause();
+                audio.currentTime = 0;
+            }}
+        </script>
+    """, unsafe_allow_html=True)
 
 # --- CSS: ULTRA GLITCH + MOBILE FIX ---
 def inject_css(video_file_path):
@@ -178,7 +202,7 @@ def inject_css(video_file_path):
     """, unsafe_allow_html=True)
 
 def trigger_static_transition():
-    play_audio("https://www.myinstants.com/media/sounds/static-noise.mp3", file_type="mp3", audio_id="static")
+    play_sound_effect("https://www.myinstants.com/media/sounds/static-noise.mp3", file_type="mp3", audio_id="static")
     placeholder = st.empty()
     with placeholder.container():
         st.markdown('<div style="position:fixed;top:0;left:0;width:100%;height:100%;background-color:#111;z-index:10000;"></div>', unsafe_allow_html=True)
@@ -293,7 +317,7 @@ def save_score(tag, name, usn, time_val):
         except gspread.exceptions.WorksheetNotFound:
             print("Worksheet 'Scores' not found, creating it.")
             worksheet = sh.add_worksheet(title="Scores", rows=100, cols=4)
-            worksheet.append_row(["Tag", "Name", "USN", "Time"])
+            works.append_row(["Tag", "Name", "USN", "Time"])
             print("Worksheet 'Scores' created with headers.")
 
         worksheet.append_row([
@@ -343,11 +367,7 @@ if 'game_state' not in st.session_state:
         'real_boxes': [], 
         'fake_boxes': [], 
         'hits': 0,
-        'menu_music_playing': False,
-        'gameplay_music_playing': False,
-        # --- FIXED: Add placeholders for persistent audio ---
-        'menu_music_placeholder': st.empty(),
-        'game_music_placeholder': st.empty()
+        'audio_enabled': False # Start as disabled
     })
 
 st.title("DETROIT: ANOMALY [09]")
@@ -361,10 +381,6 @@ if st.session_state.game_state == "menu":
         </style>
         """, unsafe_allow_html=True)
     
-    # Add audio initialization button
-    if 'audio_enabled' not in st.session_state:
-        st.session_state.audio_enabled = False
-    
     # --- FIXED: "Enable Audio" button logic ---
     if not st.session_state.audio_enabled:
         st.warning("🔊 Audio is disabled. Click below to enable sound.")
@@ -372,18 +388,13 @@ if st.session_state.game_state == "menu":
             st.session_state.audio_enabled = True
             # We play a sound *immediately* on this click to "unlock" 
             # the browser's autoplay policy.
-            play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="unlock-sound")
+            play_sound_effect("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="unlock-sound")
             time.sleep(0.1) # Give it a tiny moment to register
             st.rerun()
-    
-    # --- FIXED: Menu Music Logic ---
-    if st.session_state.audio_enabled and not st.session_state.menu_music_playing:
-        audio_html = play_background_music("537256__humanfobia__letargo-sumergido.mp3", file_type="mp3", audio_id="menu-music")
-        if audio_html:
-            # Place the audio player in its persistent placeholder
-            st.session_state.menu_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
-            st.session_state.menu_music_playing = True
-            st.session_state.gameplay_music_playing = False
+    else:
+        # --- FIXED: Play music on EVERY rerun ---
+        # The JS inside the function stops it from restarting
+        play_background_music("537256__humanfobia__letargo-sumergido.mp3", file_type="mp3", audio_id="menu-music")
     
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
@@ -392,10 +403,10 @@ if st.session_state.game_state == "menu":
     
     # --- FIXED: "Start Simulation" button logic ---
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn) or not st.session_state.audio_enabled)):
-        play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
+        play_sound_effect("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
         
-        # --- FIXED: Clear the menu music player ---
-        st.session_state.menu_music_placeholder.empty()
+        # --- FIXED: Explicitly stop the menu music ---
+        stop_background_music("menu-music")
         
         time.sleep(0.3)
         
@@ -406,9 +417,7 @@ if st.session_state.game_state == "menu":
             'player_usn': usn, 
             'start_time': time.time(), 
             'current_level': 0, 
-            'hits': 0,
-            'menu_music_playing': False, # Reset flag
-            'gameplay_music_playing': False # Reset flag
+            'hits': 0
         })
         move_glitch(get_num_real_targets(0))
         st.rerun()
@@ -448,13 +457,9 @@ elif st.session_state.game_state == "playing":
         """, unsafe_allow_html=True)
     
     # --- FIXED: Gameplay Music Logic ---
-    if st.session_state.audio_enabled and not st.session_state.gameplay_music_playing:
-        audio_html = play_background_music("615546__projecteur__cosmic-dark-synthwave.mp3", file_type="mp3", audio_id="gameplay-music")
-        if audio_html:
-            # Place the game music in its persistent placeholder
-            st.session_state.game_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
-            st.session_state.gameplay_music_playing = True
-            st.session_state.menu_music_playing = False
+    if st.session_state.audio_enabled:
+        # This is called on EVERY rerun
+        play_background_music("615546__projecteur__cosmic-dark-synthwave.mp3", file_type="mp3", audio_id="gameplay-music")
 
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
@@ -473,7 +478,7 @@ elif st.session_state.game_state == "playing":
             fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_fake)
             
             if hit:
-                play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav", audio_id="hit-sound")
+                play_sound_effect("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav", audio_id="hit-sound")
                 time.sleep(0.3)
                 
                 trigger_static_transition()
@@ -488,24 +493,23 @@ elif st.session_state.game_state == "playing":
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
                         
-                        # --- FIXED: Clear the game music player ---
-                        st.session_state.game_music_placeholder.empty()
+                        # --- FIXED: Explicitly stop the game music ---
+                        stop_background_music("gameplay-music")
                         
-                        st.session_state.gameplay_music_playing = False # Reset flag
                 else: 
                     move_glitch(targets)
                 
                 st.rerun()
                 
             elif fake_hit:
-                play_audio("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav", audio_id="decoy-sound")
+                play_sound_effect("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav", audio_id="decoy-sound")
                 time.sleep(0.3)
                 st.toast("DECOY NEUTRALIZED.", icon="⚠")
                 move_glitch(targets)
                 st.rerun()
             
             else:
-                play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="miss-sound")
+                play_sound_effect("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="miss-sound")
                 time.sleep(0.3)
                 st.toast("MISS! RELOCATING...", icon="❌")
                 move_glitch(targets)
@@ -522,5 +526,4 @@ elif st.session_state.game_state == "game_over":
                 st.error("UPLOAD FAILED.")
         time.sleep(1.5)
         st.session_state.game_state = 'menu'
-        st.session_state.menu_music_playing = False # Reset flag so menu music will play
         st.rerun()
