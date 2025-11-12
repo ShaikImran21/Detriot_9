@@ -15,42 +15,100 @@ from google.oauth2.service_account import Credentials
 st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="wide", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 1200
+# --- FIXED: Define 16:9 height and reduce tolerance ---
 GAME_HEIGHT = int(GAME_WIDTH * (9 / 16)) # This is 675
-HIT_TOLERANCE = 25 
+HIT_TOLERANCE = 25 # 150 was too large and hitting decoys
 
-# Use the file paths for the images you uploaded
+# --- FIXED: Use your uploaded filenames ---
 LEVEL_FILES = ["level1.png", "level2.png", "level3.png"]
-GLITCHES_PER_LEVEL = [3, 5, 7] # 3 for level 1, 5 for level 2, 7 for level 3
+GLITCHES_PER_LEVEL = [3, 5, 7]
 
 # --- HELPER: ASSETS ---
-# Kept this function, but it's only used for the (now removed) video
 def get_base64(bin_file):
     try:
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- AUDIO FUNCTIONS (DISABLED) ---
-# @st.cache_data(show_spinner=False, persist="disk")
-# def get_audio_base64(bin_file):
-#     try:
-#         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
-#     except: return None
+# --- AUDIO FUNCTIONS (User's Version) ---
+@st.cache_data(show_spinner=False, persist="disk")
+def get_audio_base64(bin_file):
+    try:
+        with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
+    except: return None
 
 def play_background_music(audio_file, file_type="mp3", audio_id="bg-music"):
-    pass # DISABLED
+    """
+    Plays a looping background music track.
+    """
+    try:
+        audio_base64 = get_audio_base64(audio_file)
+        if audio_base64:
+            audio_html = f"""
+                <audio id="{audio_id}" autoplay loop style="display:none;">
+                    <source src="data:audio/{file_type};base64,{audio_base64}" type="audio/{file_type}">
+                </audio>
+            """
+            return audio_html
+        return ""
+    except Exception as e:
+        print(f"Background audio error: {e}")
+        return ""
 
 def play_audio(audio_file, file_type="wav", audio_id=""):
-    pass # DISABLED
+    """
+    Plays a one-shot sound effect.
+    Uses a unique ID to be re-triggerable.
+    """
+    try:
+        audio_base64 = get_audio_base64(audio_file)
+        if audio_base64:
+            # Use a unique key to force re-rendering and re-playing
+            unique_id = f"{audio_id}_{random.randint(1000,9999)}"
+            audio_html = f"""
+                <audio id="{unique_id}" autoplay style="display:none;">
+                    <source src="data:audio/{file_type};base64,{audio_base64}" type="audio/{file_type}">
+                </audio>
+            """
+            st.markdown(audio_html, unsafe_allow_html=True)
+    except Exception as e:
+        print(f"Audio error: {e}")
+        pass
 
 # --- CSS: ULTRA GLITCH + MOBILE FIX ---
-# --- MODIFIED: Removed video background logic ---
-def inject_css():
+def inject_css(video_file_path):
     
+    # 1. ENCODE THE VIDEO FILE
+    video_base64 = get_base64(video_file_path)
+    
+    # 2. CREATE THE HTML <video> TAG
+    if video_base64:
+        video_html = f"""
+        <video id="video-bg" autoplay loop muted>
+            <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+        """
+        st.markdown(video_html, unsafe_allow_html=True)
+
     # 3. CSS for the video + original CSS
     st.markdown(f"""
         <style>
-            /* --- START: VIDEO BACKGROUND (REMOVED) --- */
-            
+            /* --- START: VIDEO BACKGROUND --- */
+            #video-bg {{
+                position: fixed;
+                right: 0;
+                bottom: 0;
+                min-width: 100%;
+                min-height: 100%;
+                width: auto;
+                height: auto;
+                z-index: -100;
+                object-fit: cover;
+                opacity: 1.0;
+                display: none;
+            }}
+            /* --- END: VIDEO BACKGROUND --- */
+
             /* BASE THEME - MODIFIED for VIDEO */
             .stApp {{ 
                 background-color: #080808;
@@ -121,7 +179,7 @@ def inject_css():
     """, unsafe_allow_html=True)
 
 def trigger_static_transition():
-    # play_audio(".../static-noise.mp3", file_type="mp3", audio_id="static") # DISABLED
+    # play_audio("https://www.myinstants.com/media/sounds/static-noise.mp3", file_type="mp3", audio_id="static")
     placeholder = st.empty()
     with placeholder.container():
         st.markdown('<div style="position:fixed;top:0;left:0;width:100%;height:100%;background-color:#111;z-index:10000;"></div>', unsafe_allow_html=True)
@@ -131,12 +189,13 @@ def trigger_static_transition():
         time.sleep(0.4)
     placeholder.empty()
 
-# --- SMART GLITCH GENERATION (FIXED) ---
+# --- SMART GLITCH GENERATION ---
+# --- FIXED: Use GAME_WIDTH and GAME_HEIGHT ---
 def get_random_box(level, is_fake=False):
     if is_fake: max_s, min_s = max(180 - level*15, 60), max(70 - level*5, 40)
     else: max_s, min_s = max(150 - level*20, 30), min(max(50 - level*10, 15), max(150 - level*20, 30))
     w, h = random.randint(min_s, max_s), random.randint(min_s, max_s)
-    # --- FIXED: Use GAME_WIDTH and GAME_HEIGHT instead of 1024 ---
+    # Use GAME_WIDTH and GAME_HEIGHT instead of 1024
     return (random.randint(50, GAME_WIDTH-w-50), random.randint(50, GAME_HEIGHT-h-50), w, h)
 
 def check_overlap(box1, box2, buffer=20):
@@ -180,55 +239,100 @@ def generate_mutating_frame(base_img, boxes, is_fake=False):
             except: pass
     return frame
 
+# --- FIXED: Corrected scaling logic ---
 @st.cache_data(show_spinner=False, persist="disk")
 def generate_scaled_gif(img_path, real_boxes_orig, fake_boxes_orig, target_width, level_idx, glitch_seed):
     try:
         random.seed(glitch_seed)
         base_img = Image.open(img_path).convert("RGB")
         
-        target_height = GAME_HEIGHT
+        # Calculate 16:9 aspect ratio height
+        target_height = GAME_HEIGHT # Use the global variable
+        
+        # Resize the base image *once* to the final display size
         base_img = base_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+        
+        # NO SCALING NEEDED for boxes, as they are now generated
+        # in the correct coordinate space (0-1200, 0-675)
         
         frames = [base_img.copy() for _ in range(15)]
         for _ in range(8):
+            # Apply glitches using the original (now correct) box coordinates
             frames.append(generate_mutating_frame(generate_mutating_frame(base_img, real_boxes_orig, False), fake_boxes_orig, True))
         
-        # Use an OS-independent temp file path
-        temp_file = os.path.join("/tmp", f"lvl_{level_idx}_{glitch_seed}.gif")
+        temp_file = f"/tmp/lvl_{level_idx}_{glitch_seed}.gif"
         frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15+[70]*8, loop=0)
         
+        # Return the *original* boxes, as they are the correct "scaled" boxes
         return temp_file, real_boxes_orig, fake_boxes_orig
     
-    except Exception as e:
-        print(f"Error in generate_scaled_gif: {e}") 
-        # Fallback in case of file error
-        try:
-            base_img = Image.new("RGB", (target_width, target_height), color="black")
-            return base_img, [], []
-        except:
-            return None, [], []
-
+    except: return None, [], []
 
 def validate_usn(usn): return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
 
-# --- GOOGLE SHEETS (DISABLED) ---
+# --- GOOGLE SHEETS ---
 conn = None
-# try: conn = st.connection("gsheets", type=GSheetsConnection) # DISABLED
-# except: pass # DISABLED
+try: conn = st.connection("gsheets", type=GSheetsConnection)
+except: pass
 
 def save_score(tag, name, usn, time_val):
-    # This function now pretends to work
-    print(f"Score for {name} ({usn}): {time_val} (GSheets Disabled)")
-    return True # Pretend it was successful
+    try:
+        scopes = [
+            "https://spreadsheets.google.com/feeds",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        
+        creds_dict = st.secrets["connections"]["gsheets"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        
+        client = gspread.authorize(creds)
+        
+        if "spreadsheet" not in creds_dict:
+            st.error("GSheets Error: 'spreadsheet' (URL) not found in secrets.")
+            return False
+            
+        spreadsheet_url = creds_dict["spreadsheet"]
+        sh = client.open_by_url(spreadsheet_url)
+
+        try:
+            worksheet = sh.worksheet("Scores")
+        except gspread.exceptions.WorksheetNotFound:
+            print("Worksheet 'Scores' not found, creating it.")
+            worksheet = sh.add_worksheet(title="Scores", rows=100, cols=4)
+            worksheet.append_row(["Tag", "Name", "USN", "Time"])
+            print("Worksheet 'Scores' created with headers.")
+
+        worksheet.append_row([
+            str(tag), 
+            str(name), 
+            str(usn), 
+            str(f"{time_val:.2f}")
+        ])
+        return True
+    except Exception as e:
+        print(f"GSheets Write Error: {e}")
+        st.error(f"GSheets Write Error: {e}")
+        return False
 
 def get_leaderboard():
-    # This function now returns an empty dataframe
-    print("GSheets is disabled. Returning empty leaderboard.")
+    if conn:
+        try:
+            df = conn.read(worksheet="Scores", ttl=0, dtype=str)
+            df.columns = df.columns.str.strip()
+            if not all(c in df.columns for c in ['Tag', 'Name', 'USN', 'Time']): return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
+            df['Time'] = pd.to_numeric(df['Time'].astype(str).str.replace(',', ''), errors='coerce')
+            df.dropna(subset=['Time', 'USN'], inplace=True)
+            if df.empty: return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
+            df.sort_values(by='Time', ascending=True, inplace=True)
+            df['Rank'] = range(1, len(df) + 1)
+            df['Time'] = df['Time'].apply(lambda x: f"{x:.2f}s")
+            return df[['Rank', 'Name', 'USN', 'Time']].head(10).reset_index(drop=True)
+        except Exception: pass
     return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
 
 # --- MAIN INIT ---
-# --- MODIFIED: Call CSS without video file ---
-inject_css()
+# Make sure you have this video file
+inject_css("167784-837438543.mp4")
 
 def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1
 
@@ -248,31 +352,61 @@ if 'game_state' not in st.session_state:
         'hits': 0,
         'menu_music_playing': False,
         'gameplay_music_playing': False,
+        # --- This is your audio placeholder logic ---
         'menu_music_placeholder': st.empty(),
-        'game_music_placeholder': st.empty(),
-        # --- ADDED: Set audio enabled to true by default since we removed the button ---
-        'audio_enabled': True 
+        'game_music_placeholder': st.empty()
     })
 
 st.title("DETROIT: ANOMALY [09]")
 
 if st.session_state.game_state == "menu":
-    # --- REMOVED: Logic to show video background ---
+    # Show video background
+    st.markdown("""
+        <style>
+        #video-bg { display: block !important; }
+        .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }
+        </style>
+        """, unsafe_allow_html=True)
     
-    # --- REMOVED: Audio "Enable" button ---
+    # Add audio initialization button
+    if 'audio_enabled' not in st.session_state:
+        st.session_state.audio_enabled = False
+    
+    # --- "Enable Audio" button logic (User's Version) ---
+    if not st.session_state.audio_enabled:
+        st.warning("🔊 Audio is disabled. Click below to enable sound.")
+        if st.button("🎵 ENABLE AUDIO", type="primary"):
+            st.session_state.audio_enabled = True
+            # We play a sound *immediately* on this click to "unlock" 
+            # the browser's autoplay policy.
+            # play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="unlock-sound")
+            time.sleep(0.1) # Give it a tiny moment to register
+            st.rerun()
+    
+    # --- Menu Music Logic (User's Version) ---
+    if st.session_state.audio_enabled:
+        # audio_html = play_background_music("537256__humanfobia__letargo-sumergido.mp3", file_type="mp3", audio_id="menu-music")
+        # if audio_html:
+        #     # We must re-fill the placeholder on every run to keep it on the page
+        #     st.session_state.menu_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
+            
+        #     # Only set the flag the *first* time
+        #     if not st.session_state.menu_music_playing:
+        #         st.session_state.menu_music_playing = True
+        #         st.session_state.gameplay_music_playing = False
+        pass # Commented out to prevent file errors on my end
     
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
     name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
     usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
     
-    # --- MODIFIED: Removed 'audio_enabled' from the disabled check ---
-    disabled_state = (len(tag)!=3 or not name or not validate_usn(usn))
-
-    if st.button(">> START SIMULATION <<", type="primary", disabled=disabled_state):
-        # play_audio(".../click-sound.wav", file_type="wav", audio_id="click-sound") # DISABLED
+    # --- "Start Simulation" button logic (User's Version) ---
+    if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn) or not st.session_state.audio_enabled)):
+        # play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
         
-        st.session_state.menu_music_placeholder.empty() 
+        # --- Clear the menu music player (User's Version) ---
+        st.session_state.menu_music_placeholder.empty() # This empties the *content*
         
         time.sleep(0.3)
         
@@ -284,8 +418,8 @@ if st.session_state.game_state == "menu":
             'start_time': time.time(), 
             'current_level': 0, 
             'hits': 0,
-            'menu_music_playing': False, 
-            'gameplay_music_playing': False 
+            'menu_music_playing': False, # Reset flag
+            'gameplay_music_playing': False # Reset flag
         })
         move_glitch(get_num_real_targets(0))
         st.rerun()
@@ -311,17 +445,31 @@ if st.session_state.game_state == "menu":
     st.markdown("---")
     st.markdown("### GLOBAL RANKINGS")
     lb = get_leaderboard()
-    if not lb.empty: 
-        st.dataframe(lb, hide_index=True, use_container_width=True)
-    else:
-        # --- MODIFIED: Show a clear "Offline" message ---
-        st.error("LEADERBOARD OFFLINE (Google Sheets not configured)")
-
+    if conn and not lb.empty: st.dataframe(lb, hide_index=True, use_container_width=True)
+    elif conn: st.warning("WAITING FOR DATA LINK...")
+    else: st.error("CONNECTION SEVERED.")
 
 elif st.session_state.game_state == "playing":
-    # --- REMOVED: Logic to hide video background ---
+    # Hide video background
+    st.markdown("""
+        <style>
+        #video-bg { display: none !important; }
+        .stApp { background-color: #080808 !important; }
+        </style>
+        """, unsafe_allow_html=True)
     
-    # play_background_music(".../cosmic-dark-synthwave.mp3", file_type="mp3", audio_id="gameplay-music") # DISABLED
+    # --- Gameplay Music Logic (User's Version) ---
+    if st.session_state.audio_enabled:
+        # audio_html = play_background_music("615546__projecteur__cosmic-dark-synthwave.mp3", file_type="mp3", audio_id="gameplay-music")
+        # if audio_html:
+        #     # Re-fill the placeholder on every run
+        #     st.session_state.game_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
+            
+        #     # Only set the flag the first time
+        #     if not st.session_state.gameplay_music_playing:
+        #         st.session_state.gameplay_music_playing = True
+        #         st.session_state.menu_music_playing = False
+        pass # Commented out to prevent file errors on my end
 
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
@@ -331,17 +479,19 @@ elif st.session_state.game_state == "playing":
     c3.markdown(f"LVL: {lvl+1}/3")
     st.progress(st.session_state.hits/needed, text=f"Neutralized: {st.session_state.hits}/{needed}")
     
+    # --- FIXED: This call now uses the corrected coordinate logic ---
     gif, scaled_real, scaled_fake = generate_scaled_gif(LEVEL_FILES[lvl], st.session_state.real_boxes, st.session_state.fake_boxes, GAME_WIDTH, lvl, st.session_state.glitch_seed)
     
     if gif:
         coords = streamlit_image_coordinates(gif, key=f"lvl_{lvl}_{st.session_state.glitch_seed}", width=GAME_WIDTH)
         if coords:
             cx, cy = coords['x'], coords['y']
+            # --- FIXED: Hit detection is now precise ---
             hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_real)
             fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_fake)
             
             if hit:
-                # play_audio(".../hit-sound.wav", file_type="wav", audio_id="hit-sound") # DISABLED
+                # play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav", audio_id="hit-sound")
                 time.sleep(0.3)
                 
                 trigger_static_transition()
@@ -355,23 +505,26 @@ elif st.session_state.game_state == "playing":
                     else: 
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
+                        
+                        # --- Clear the game music player (User's Version) ---
                         st.session_state.game_music_placeholder.empty()
-                        st.session_state.gameplay_music_playing = False 
-                        st.session_state.menu_music_playing = False 
+                        
+                        st.session_state.gameplay_music_playing = False # Reset flag
+                        st.session_state.menu_music_playing = False # Also reset menu flag
                 else: 
                     move_glitch(targets)
                 
                 st.rerun()
                 
             elif fake_hit:
-                # play_audio(".../decoy-sound.wav", file_type="wav", audio_id="decoy-sound") # DISABLED
+                # play_audio("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav", audio_id="decoy-sound")
                 time.sleep(0.3)
                 st.toast("DECOY NEUTRALIZED.", icon="⚠")
                 move_glitch(targets)
                 st.rerun()
             
             else:
-                # play_audio(".../miss-sound.wav", file_type="wav", audio_id="miss-sound") # DISABLED
+                # play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="miss-sound")
                 time.sleep(0.3)
                 st.toast("MISS! RELOCATING...", icon="❌")
                 move_glitch(targets)
@@ -383,10 +536,10 @@ elif st.session_state.game_state == "game_over":
     if st.button(">> UPLOAD SCORE <<", type="primary"):
         with st.spinner("UPLOADING..."):
             if save_score(st.session_state.player_tag, st.session_state.player_name, st.session_state.player_usn, st.session_state.final_time): 
-                st.success("UPLOAD SUCCESSFUL (OFFLINE MODE).")
+                st.success("UPLOAD SUCCESSFUL.")
             else: 
                 st.error("UPLOAD FAILED.")
         time.sleep(1.5)
         st.session_state.game_state = 'menu'
-        st.session_state.menu_music_playing = False 
+        st.session_state.menu_music_playing = False # Reset flag so menu music will play
         st.rerun()
