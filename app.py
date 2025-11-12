@@ -183,7 +183,7 @@ def trigger_static_transition():
     with placeholder.container():
         st.markdown('<div style="position:fixed;top:0;left:0;width:100%;height:100%;background-color:#111;z-index:10000;"></div>', unsafe_allow_html=True)
         time.sleep(0.1)
-        g_url = "https://media.giphy.com/media/oEI9uBYSzLpBK/giphy.gif"
+        g_url = "https.media.giphy.com/media/oEI9uBYSzLpBK/giphy.gif"
         st.markdown(f'<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:url({g_url});background-size:cover;z-index:10001;opacity:0.8;mix-blend-mode:hard-light;"></div>', unsafe_allow_html=True)
         time.sleep(0.4)
     placeholder.empty()
@@ -329,7 +329,7 @@ inject_css("167784-837438543.mp4")
 
 def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1
 
-# --- ################## FIX #1: TEXT INPUT CALLBACK ################## ---
+# --- ################## FIX: MOVED FUNCTION HERE ################## ---
 # This callback will run when user types in TAG or USN box
 def sync_upper_case():
     # Make sure the values in session state are uppercase
@@ -345,12 +345,9 @@ if 'game_state' not in st.session_state:
         'game_state': 'menu', 
         'current_level': 0, 
         'start_time': 0.0, 
-        # --- ################# FIX #2: INITIAL STATE ################# ---
-        # Start as empty strings, not 'UNK'
         'player_tag': '', 
         'player_name': '', 
         'player_usn': '', 
-        # --- ######################################################### ---
         'final_time': 0.0, 
         'last_move_time': time.time(), 
         'glitch_seed': random.randint(1, 100000), 
@@ -387,7 +384,6 @@ if st.session_state.game_state == "menu":
             st.rerun()
     
     # --- AUDIO FIX (from last time) ---
-    # This check prevents the audio from restarting on *every* rerun (like typing)
     if st.session_state.audio_enabled and not st.session_state.menu_music_playing:
         audio_html = play_background_music("537256__humanfobia__letargo-sumergido.mp3", file_type="mp3", audio_id="menu-music")
         if audio_html:
@@ -397,9 +393,7 @@ if st.session_state.game_state == "menu":
     
     st.markdown("### OPERATIVE DATA INPUT")
 
-    # --- ################# FIX #3: TEXT INPUT BINDING ################# ---
-    # We use 'key' to bind the widget directly to st.session_state
-    # This makes the widget's state persist across reruns without clearing
+    # --- TEXT INPUT FIX (from last time) ---
     st.text_input(
         ">> AGENT TAG (3 CHARS):", 
         max_chars=3, 
@@ -447,7 +441,6 @@ if st.session_state.game_state == "menu":
         })
         move_glitch(get_num_real_targets(0))
         st.rerun()
-    # --- ############################################################ ---
 
     with st.expander("MISSION BRIEFING // RULES"):
         st.markdown("""
@@ -559,11 +552,9 @@ elif st.session_state.game_state == "game_over":
         st.session_state.game_state = 'menu'
         st.session_state.menu_music_playing = False
         
-        # --- ################# FIX #4: CLEAR OLD INPUTS ################# ---
         # Clear the old player data so the form is fresh
         st.session_state.player_tag = ''
         st.session_state.player_name = ''
         st.session_state.player_usn = ''
-        # --- ############################################################ ---
         
         st.rerun()
