@@ -18,7 +18,7 @@ GAME_WIDTH = 1200
 # MAXIMUM TOLERANCE: Very easy to hit now, perfect for all mobile users.
 HIT_TOLERANCE = 150 
 
-LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets.level3.png"] # <-- MODIFIED
+LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png"] # <-- MODIFIED
 GLITCHES_PER_LEVEL = [3, 5, 7] # <-- MODIFIED
 
 # --- HELPER: ASSETS ---
@@ -35,28 +35,15 @@ def get_audio_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- NEW STATE MANAGEMENT FOR MUSIC ---
-if 'current_music' not in st.session_state:
-    st.session_state.current_music = None
-if 'music_placeholder' not in st.session_state:
-    st.session_state.music_placeholder = st.empty()
-
 def play_audio(audio_file, loop=False, file_type="wav"):
     """
-    Plays an audio file. If loop=True, it manages the audio state.
+    Plays an audio file (wav or mp3) using Base64 embedding.
     """
-    is_music = loop
-    
-    # --- MUSIC LOOP CONTROL ---
-    if is_music:
-        # If this music is already playing, do nothing.
+    # This check is crucial for managing music loops
+    if loop:
         if st.session_state.current_music == audio_file:
-            return
-        # If different music is playing, stop it.
-        if st.session_state.current_music is not None:
-            st.session_state.music_placeholder.empty()
-        # Set the new music track
-        st.session_state.current_music = audio_file
+            return # Music is already playing, do nothing
+        st.session_state.current_music = audio_file # Set new music
     
     try:
         audio_base64 = get_audio_base64(audio_file)
@@ -67,12 +54,10 @@ def play_audio(audio_file, loop=False, file_type="wav"):
                     <source src="data:audio/{file_type};base64,{audio_base64}" type="audio/{file_type}">
                 </audio>
             """
-            
-            if is_music:
-                # If it's music, put it in the persistent placeholder
+            # Injecting into a persistent placeholder for music, or directly for SFX
+            if loop:
                 st.session_state.music_placeholder.markdown(audio_html, unsafe_allow_html=True)
             else:
-                # If it's a short sound effect, just inject it.
                 st.markdown(audio_html, unsafe_allow_html=True)
     except:
         pass # Fail silently if file not found
@@ -203,7 +188,7 @@ def trigger_static_transition():
         time.sleep(0.4)
     placeholder.empty()
 
-# --- SMART GLITCH GENERATION (Unchanged) ---
+# --- SMART GLITCH GENERATION ---
 def get_random_box(level, is_fake=False):
     if is_fake: max_s, min_s = max(180 - level*15, 60), max(70 - level*5, 40)
     else: max_s, min_s = max(150 - level*20, 30), min(max(50 - level*10, 15), max(150 - level*20, 30))
@@ -272,14 +257,14 @@ def generate_scaled_gif(img_path, real_boxes_orig, fake_boxes_orig, target_width
 
 def validate_usn(usn): return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
 
-# --- GOOGLE SHEETS (Unchanged) ---
+# --- GOOGLE SHEETS ---
 conn = None
 try: conn = st.connection("gsheets", type=GSheetsConnection)
 except: pass
 
 def save_score(tag, name, usn, time_val):
     try:
-        scopes = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        scopes = ["https.spreadsheets.google.com/feeds", "https.www.googleapis.com/auth/drive"]
         creds_dict = st.secrets["connections"]["gsheets"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
@@ -322,7 +307,7 @@ def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1
 
 # --- SESSION STATE MANAGEMENT ---
 if 'game_state' not in st.session_state:
-    st.session_state.game_state = 'splash' # START ON SPLASH
+    st.session_state.game_state = 'splash' # <-- MODIFIED: Start on 'splash'
     st.session_state.current_level = 0
     st.session_state.start_time = 0.0
     st.session_state.player_tag = 'UNK'
@@ -334,15 +319,16 @@ if 'game_state' not in st.session_state:
     st.session_state.real_boxes = []
     st.session_state.fake_boxes = []
     st.session_state.hits = 0
+# --- ADDED: Music state tracking ---
 if 'current_music' not in st.session_state:
-    st.session_state.current_music = None # Music tracking
+    st.session_state.current_music = None 
 if 'music_placeholder' not in st.session_state:
-    st.session_state.music_placeholder = st.empty() # Music container
+    st.session_state.music_placeholder = st.empty()
 
 
 st.title("DETROIT: ANOMALY [09]")
 
-# --- SPLASH SCREEN LOGIC (FIX FOR AUTOPLAY) ---
+# --- NEW: SPLASH SCREEN LOGIC ---
 if st.session_state.game_state == "splash":
     st.markdown("""
         <style>
@@ -356,7 +342,7 @@ if st.session_state.game_state == "splash":
         st.markdown("<br><br><br><br>", unsafe_allow_html=True) 
         if st.button(">> [ ENTER ANOMALY ] <<", type="primary", use_container_width=True):
             # This is the FIRST CLICK. Audio is now unlocked.
-            # 1. Play the menu music
+            # 1. Play the menu music (FIXED: Filename __)
             play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3")
             time.sleep(0.3) # Give audio time to start
             
@@ -364,7 +350,7 @@ if st.session_state.game_state == "splash":
             st.session_state.game_state = "menu"
             st.rerun()
 
-# --- MENU SCREEN LOGIC ---
+# --- MODIFIED: MENU SCREEN LOGIC ---
 elif st.session_state.game_state == "menu":
     st.markdown("""
         <style>
@@ -373,7 +359,7 @@ elif st.session_state.game_state == "menu":
         </style>
         """, unsafe_allow_html=True)
     
-    # Check if menu music needs to be started (e.g., coming from game_over)
+    # --- MODIFIED: Ensure menu music is playing ---
     if st.session_state.current_music != "537256__humanfobia__letargo-sumergido.mp3":
         play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3")
     
@@ -383,6 +369,7 @@ elif st.session_state.game_state == "menu":
     usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
     
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn))):
+        # --- FIXED: Filename __ ---
         play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav")
         time.sleep(0.3) 
         
@@ -414,9 +401,9 @@ elif st.session_state.game_state == "menu":
     elif conn: st.warning("WAITING FOR DATA LINK...")
     else: st.error("CONNECTION SEVERED.")
 
-# --- PLAYING SCREEN LOGIC ---
+# --- MODIFIED: PLAYING SCREEN LOGIC ---
 elif st.session_state.game_state == "playing":
-    # Start gameplay music (only if it's not already playing)
+    # --- FIXED: Filename __ and music check ---
     if st.session_state.current_music != "615546__projecteur__cosmic-dark-synthwave.mp3":
         play_audio("615546__projecteur__cosmic-dark-synthwave.mp3", loop=True, file_type="mp3")
 
@@ -437,6 +424,7 @@ elif st.session_state.game_state == "playing":
             fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_fake)
             
             if hit:
+                # --- FIXED: Filename __ ---
                 play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav")
                 time.sleep(0.3) 
                 
@@ -456,18 +444,20 @@ elif st.session_state.game_state == "playing":
                 st.rerun()
                 
             elif fake_hit:
+                # --- FIXED: Filename __ ---
                 play_audio("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav")
                 time.sleep(0.3) 
                 st.toast("DECOY NEUTRALIZED.", icon="⚠"); move_glitch(targets); st.rerun()
             
             else:
+                # --- FIXED: Filename __ ---
                 play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav")
                 time.sleep(0.3) 
                 st.toast("MISS! RELOCATING...", icon="❌"); move_glitch(targets); st.rerun()
 
-# --- GAME OVER SCREEN LOGIC ---
+# --- MODIFIED: GAME OVER SCREEN LOGIC ---
 elif st.session_state.game_state == "game_over":
-    # Stop gameplay music
+    # --- ADDED: Stop all music ---
     if st.session_state.current_music is not None:
         st.session_state.music_placeholder.empty()
         st.session_state.current_music = None 
