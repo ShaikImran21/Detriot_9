@@ -7,15 +7,15 @@ import base64
 from PIL import Image, ImageOps, ImageEnhance
 from streamlit_gsheets import GSheetsConnection
 from streamlit_image_coordinates import streamlit_image_coordinates
-import re
+import re 
 import gspread
 from google.oauth2.service_account import Credentials
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="centered", initial_sidebar_state="collapsed")
 
-GAME_WIDTH = 1200
-HIT_TOLERANCE = 150
+GAME_WIDTH = 700
+HIT_TOLERANCE = 150 
 
 LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png"]
 GLITCHES_PER_LEVEL = [3, 5, 7]
@@ -26,18 +26,16 @@ def get_base64(bin_file):
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- AUDIO FUNCTIONS ---
+# --- NEW: AUDIO FUNCTIONS (from v1) ---
 @st.cache_data(show_spinner=False, persist="disk")
 def get_audio_base64(bin_file):
+    """Encodes audio file for HTML embedding."""
     try:
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
     except: return None
 
-# --- NEW: Background Music Function ---
 def play_background_music(audio_file, file_type="mp3", audio_id="bg-music"):
-    """
-    Plays a looping background music track.
-    """
+    """Generates HTML for looping background music."""
     try:
         audio_base64 = get_audio_base64(audio_file)
         if audio_base64:
@@ -52,16 +50,25 @@ def play_background_music(audio_file, file_type="mp3", audio_id="bg-music"):
         print(f"Background audio error: {e}")
         return ""
 
-# --- NEW: Sound Effect Function ---
 def play_audio(audio_file, file_type="wav", audio_id=""):
-    """
-    Plays a one-shot sound effect.
-    Uses a unique ID to be re-triggerable.
-    """
+    """Generates HTML for a one-shot sound effect."""
     try:
+        # We try to get from local file first
         audio_base64 = get_audio_base64(audio_file)
+        
+        # If local file fails (e.g., it's a URL), embed the URL directly
+        if not audio_base64 and audio_file.startswith("http"):
+            unique_id = f"{audio_id}_{random.randint(1000,9999)}"
+            audio_html = f"""
+                <audio id="{unique_id}" autoplay style="display:none;">
+                    <source src="{audio_file}" type="audio/{file_type}">
+                </audio>
+            """
+            st.markdown(audio_html, unsafe_allow_html=True)
+            return
+
+        # If local file succeeds
         if audio_base64:
-            # Use a unique key to force re-rendering and re-playing
             unique_id = f"{audio_id}_{random.randint(1000,9999)}"
             audio_html = f"""
                 <audio id="{unique_id}" autoplay style="display:none;">
@@ -69,114 +76,98 @@ def play_audio(audio_file, file_type="wav", audio_id=""):
                 </audio>
             """
             st.markdown(audio_html, unsafe_allow_html=True)
+            
     except Exception as e:
         print(f"Audio error: {e}")
         pass
+# --- END NEW AUDIO FUNCTIONS ---
 
-# --- CSS: ULTRA GLITCH + MOBILE FIX ---
-def inject_css(video_file_path):
-    
-    # 1. ENCODE THE VIDEO FILE
-    video_base64 = get_base64(video_file_path)
-    
-    # 2. CREATE THE HTML <video> TAG
-    if video_base64:
-        video_html = f"""
-        <video id="video-bg" autoplay loop muted>
-            <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
-            Your browser does not support the video tag.
-        </video>
-        """
-        st.markdown(video_html, unsafe_allow_html=True)
 
-    # 3. CSS for the video + original CSS
-    st.markdown(f"""
+# --- CSS: ULTRA GLITCH + MOBILE FIX (v2) ---
+def inject_css():
+    st.markdown('<div id="static-overlay"></div>', unsafe_allow_html=True)
+
+    st.markdown("""
         <style>
-            /* --- START: VIDEO BACKGROUND --- */
-            #video-bg {{
-                position: fixed;
-                right: 0;
-                bottom: 0;
-                min-width: 100%;
-                min-height: 100%;
-                width: auto;
-                height: auto;
-                z-index: -100;
-                object-fit: cover;
-                opacity: 1.0;
-                display: none;
-            }}
-            /* --- END: VIDEO BACKGROUND --- */
-
-            /* BASE THEME - MODIFIED for VIDEO */
-            .stApp {{ 
-                background-color: #080808;
+            /* BASE THEME */
+            .stApp { 
+                background-image: url('https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdGZ2Y2dyYnhjZDY5ejd6czV4aG5qNTB6b2dndXpybWp5cDRpeDAYdyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/j5oESCsB3sY34iGOMp/giphy.gif');
                 background-size: cover;
                 background-repeat: no-repeat;
                 background-attachment: fixed;
                 background-position: center;
                 color: #d0d0d0; 
                 font-family: 'Courier New', monospace; 
-            }}
-            #MainMenu, footer, header {{visibility: hidden;}}
+            }
+            #MainMenu, footer, header {visibility: hidden;}
 
-            /* FORCE HORIZONTAL SCROLL ON MOBILE */
-            .block-container {{
+            .block-container {
+                min-width: 720px !important;
+                max-width: 900px !important;
                 overflow-x: auto !important;
-            }}
+            }
             
-            /* HARDWARE-ACCELERATED STATIC OVERLAY */
-            #static-overlay {{
+            #static-overlay {
                 position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
                 background: repeating-linear-gradient(transparent 0px, rgba(0, 0, 0, 0.25) 50%, transparent 100%),
                             repeating-linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
                 background-size: 100% 3px, 3px 100%; z-index: 99999; pointer-events: none; opacity: 0.2;
                 animation: gpu-jitter 0.3s infinite linear alternate-reverse; mix-blend-mode: hard-light;
-            }}
-            @keyframes gpu-jitter {{
-                0%, 100% {{ transform: translate3d(0,0,0); opacity: 0.15; }}
-                25% {{ transform: translate3d(-5px, -5px, 0); opacity: 0.2; }}
-                50% {{ transform: translate3d(5px, 5px, 0); opacity: 0.15; }}
-                75% {{ transform: translate3d(-5px, 5px, 0); opacity: 0.25; }}
-            }}
+            }
+            @keyframes gpu-jitter {
+                0%, 100% { transform: translate3d(0,0,0); opacity: 0.15; }
+                25% { transform: translate3d(-5px, -5px, 0); opacity: 0.2; }
+                50% { transform: translate3d(5px, 5px, 0); opacity: 0.15; }
+              75% { transform: translate3d(-5px, 5px, 0); opacity: 0.25; }
+            }
             
-            /* --- START: Glitchy Title Background --- */
-            h1 {{
+            h1 {
                 position: relative !important;
                 z-index: 1;
                 padding: 10px 5px; 
-            }}
-            
+            }
+
+            h1::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: #f00; /* Start red */
+                z-index: -1; /* Behind the text */
+                opacity: 0.3;
+                animation: glitch-bg-block 150ms infinite linear;
+            }
+
+            @keyframes glitch-bg-block {
+                0% { transform: translate(3px, -3px); background: #f00; opacity: 0.3; }
+                25% { transform: translate(-3px, 3px); background: #0ff; opacity: 0.4; }
+                50% { transform: translate(3px, 3px); background: #f0f; opacity: 0.2; }
+                75% { transform: translate(-3px, -3px); background: #0f0; opacity: 0.5; }
+                100% { transform: translate(3px, -3px); background: #f00; opacity: 0.3; }
+            }
+
             /* GLOBAL TEXT GLITCH */
-            h1, h2, h3, h4, h5, h6, p, label, span, div, button, a, input, .stDataFrame, .stMarkdown, .stExpander {{
+            h1, h2, h3, h4, h5, h6, p, label, span, div, button, a, input, .stDataFrame, .stMarkdown, .stExpander {
                 animation: glitch-text 500ms infinite !important; color: #d0d0d0 !important;
-            }}
-            img, #static-overlay {{ animation: none !important; }}
-            #static-overlay {{ animation: gpu-jitter 0.3s infinite linear alternate-reverse !important; }}
+            }
+            img, #static-overlay { animation: none !important; }
+            #static-overlay { animation: gpu-jitter 0.3s infinite linear alternate-reverse !important; }
 
-            @keyframes glitch-text {{
-                0% {{ text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }}
-                14% {{ text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }}
-                15% {{ text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }}
-                49% {{ text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }}
-                50% {{ text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }}
-                99% {{ text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }}
-                100% {{ text-shadow: -0.025em 0 0 rgba(255,0,0,0.75), -0.025em -0.025em 0 rgba(0,255,0,0.75), -0.025em -0.05em 0 rgba(0,0,255,0.75); }}
-            }}
-            /* --- NEW: MOBILE-SPECIFIC RULES --- */
-            @media (max-width: 768px) {{
-                div[data-testid="stImageCoordinates"] img {{
-                    width: 100% !important;
-                    height: auto !important;
-                }}
-
-                div[data-testid="stImageCoordinates"] {{
-                    width: 100% !important;
-                }}
-            }}
+            @keyframes glitch-text {
+                0% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
+                14% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }
+                15% { text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }
+                49% { text-shadow: -0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75); }
+                50% { text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }
+                99% { text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }
+                100% { text-shadow: -0.025em 0 0 rgba(255,0,0,0.75), -0.025em -0.025em 0 rgba(0,255,0,0.75), -0.025em -0.05em 0 rgba(0,0,255,0.75); }
+            }
         </style>
     """, unsafe_allow_html=True)
 
+# --- MODIFIED: `trigger_static_transition` now uses `play_audio` ---
 def trigger_static_transition():
     play_audio("https://www.myinstants.com/media/sounds/static-noise.mp3", file_type="mp3", audio_id="static")
     placeholder = st.empty()
@@ -188,7 +179,7 @@ def trigger_static_transition():
         time.sleep(0.4)
     placeholder.empty()
 
-# --- SMART GLITCH GENERATION ---
+# --- SMART GLITCH GENERATION (v2) ---
 def get_random_box(level, is_fake=False):
     if is_fake: max_s, min_s = max(180 - level*15, 60), max(70 - level*5, 40)
     else: max_s, min_s = max(150 - level*20, 30), min(max(50 - level*10, 15), max(150 - level*20, 30))
@@ -241,30 +232,21 @@ def generate_scaled_gif(img_path, real_boxes_orig, fake_boxes_orig, target_width
     try:
         random.seed(glitch_seed)
         base_img = Image.open(img_path).convert("RGB")
-        
-        # Calculate 16:9 aspect ratio
-        target_height = int(target_width * (9 / 16))
-        sf_width = target_width / base_img.width
-        sf_height = target_height / base_img.height
-        
-        base_img = base_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
-        
-        scaled_real = [(int(x1*sf_width), int(y1*sf_height), int(x2*sf_width), int(y2*sf_height)) for x1,y1,x2,y2 in real_boxes_orig]
-        scaled_fake = [(int(x1*sf_width), int(y1*sf_height), int(x2*sf_width), int(y2*sf_height)) for x1,y1,x2,y2 in fake_boxes_orig]
-        
+        sf = target_width / base_img.width
+        base_img = base_img.resize((target_width, int(base_img.height * sf)), Image.Resampling.LANCZOS)
+        scaled_real = [(int(x1*sf), int(y1*sf), int(x2*sf), int(y2*sf)) for x1,y1,x2,y2 in real_boxes_orig]
+        scaled_fake = [(int(x1*sf), int(y1*sf), int(x2*sf), int(y2*sf)) for x1,y1,x2,y2 in fake_boxes_orig]
         frames = [base_img.copy() for _ in range(15)]
         for _ in range(8):
             frames.append(generate_mutating_frame(generate_mutating_frame(base_img, real_boxes_orig, False), fake_boxes_orig, True))
-        
         temp_file = f"/tmp/lvl_{level_idx}_{glitch_seed}.gif"
         frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15+[70]*8, loop=0)
         return temp_file, scaled_real, scaled_fake
-    
     except: return None, [], []
 
 def validate_usn(usn): return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
 
-# --- GOOGLE SHEETS ---
+# --- GOOGLE SHEETS (v2) ---
 conn = None
 try: conn = st.connection("gsheets", type=GSheetsConnection)
 except: pass
@@ -278,7 +260,6 @@ def save_score(tag, name, usn, time_val):
         
         creds_dict = st.secrets["connections"]["gsheets"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        
         client = gspread.authorize(creds)
         
         if "spreadsheet" not in creds_dict:
@@ -325,10 +306,10 @@ def get_leaderboard():
     return pd.DataFrame(columns=["Rank", "Name", "USN", "Time"])
 
 # --- MAIN INIT ---
-inject_css("167784-837438543.mp4")
-
+inject_css()
 def get_num_real_targets(level_idx): return 2 if level_idx == 2 else 1
 
+# --- MODIFIED: `session_state` now includes all audio flags ---
 if 'game_state' not in st.session_state:
     st.session_state.update({
         'game_state': 'menu', 
@@ -343,10 +324,10 @@ if 'game_state' not in st.session_state:
         'real_boxes': [], 
         'fake_boxes': [], 
         'hits': 0,
+        # --- ADDED AUDIO STATE ---
+        'audio_enabled': False,
         'menu_music_playing': False,
         'gameplay_music_playing': False,
-        # --- FIXED: Add placeholders for persistent audio ---
-        # This is the correct way: store the st.empty() object itself in state.
         'menu_music_placeholder': st.empty(),
         'game_music_placeholder': st.empty()
     })
@@ -354,36 +335,21 @@ if 'game_state' not in st.session_state:
 st.title("DETROIT: ANOMALY [09]")
 
 if st.session_state.game_state == "menu":
-    # Show video background
-    st.markdown("""
-        <style>
-        #video-bg { display: block !important; }
-        .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }
-        </style>
-        """, unsafe_allow_html=True)
     
-    # Add audio initialization button
-    if 'audio_enabled' not in st.session_state:
-        st.session_state.audio_enabled = False
-    
-    # --- FIXED: "Enable Audio" button logic ---
+    # --- NEW: "Enable Audio" button logic ---
     if not st.session_state.audio_enabled:
         st.warning("🔊 Audio is disabled. Click below to enable sound.")
         if st.button("🎵 ENABLE AUDIO", type="primary"):
             st.session_state.audio_enabled = True
-            # We play a sound *immediately* on this click to "unlock" 
-            # the browser's autoplay policy.
             play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="unlock-sound")
-            time.sleep(0.1) # Give it a tiny moment to register
+            time.sleep(0.1) 
             st.rerun()
     
-    # --- RE-FIXED: Menu Music Logic ---
+    # --- NEW: Menu Music Logic ---
     if st.session_state.audio_enabled:
-        # Only inject the audio element IF it's not already playing
         if not st.session_state.menu_music_playing:
-            audio_html = play_background_music("537256__humanfobia__letargo-sumergido.mp3", file_type="mp3", audio_id="menu-music")
+            audio_html = play_background_music("537256__humanfobia__letargo_sumergido.mp3", file_type="mp3", audio_id="menu-music")
             if audio_html:
-                # Fill the placeholder ONCE. It will persist until we .empty() it.
                 st.session_state.menu_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
                 st.session_state.menu_music_playing = True
                 st.session_state.gameplay_music_playing = False
@@ -393,13 +359,12 @@ if st.session_state.game_state == "menu":
     name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
     usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
     
-    # --- FIXED: "Start Simulation" button logic ---
+    # --- MODIFIED: Button is disabled if audio is off ---
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn) or not st.session_state.audio_enabled)):
+        
+        # --- ADDED: Audio logic on start ---
         play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
-        
-        # --- FIXED: Clear the menu music player ---
-        st.session_state.menu_music_placeholder.empty() # This empties the *content*
-        
+        st.session_state.menu_music_placeholder.empty()
         time.sleep(0.3)
         
         st.session_state.update({
@@ -410,11 +375,12 @@ if st.session_state.game_state == "menu":
             'start_time': time.time(), 
             'current_level': 0, 
             'hits': 0,
-            'menu_music_playing': False, # Reset flag
-            'gameplay_music_playing': False # Reset flag
+            'menu_music_playing': False,
+            'gameplay_music_playing': False
         })
         move_glitch(get_num_real_targets(0))
         st.rerun()
+
 
     with st.expander("MISSION BRIEFING // RULES"):
         st.markdown("""
@@ -442,21 +408,12 @@ if st.session_state.game_state == "menu":
     else: st.error("CONNECTION SEVERED.")
 
 elif st.session_state.game_state == "playing":
-    # Hide video background
-    st.markdown("""
-        <style>
-        #video-bg { display: none !important; }
-        .stApp { background-color: #080808 !important; }
-        </style>
-        """, unsafe_allow_html=True)
     
-    # --- RE-FIXED: Gameplay Music Logic ---
+    # --- NEW: Gameplay Music Logic ---
     if st.session_state.audio_enabled:
-        # Only inject the audio element IF it's not already playing
         if not st.session_state.gameplay_music_playing:
             audio_html = play_background_music("615546__projecteur__cosmic-dark-synthwave.mp3", file_type="mp3", audio_id="gameplay-music")
             if audio_html:
-                # Fill the placeholder ONCE.
                 st.session_state.game_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
                 st.session_state.gameplay_music_playing = True
                 st.session_state.menu_music_playing = False
@@ -464,9 +421,7 @@ elif st.session_state.game_state == "playing":
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
     c1, c2, c3 = st.columns(3)
-    c1.markdown(f"AGENT: {st.session_state.player_tag}")
-    c2.markdown(f"TIME: {time.time()-st.session_state.start_time:.1f}s")
-    c3.markdown(f"LVL: {lvl+1}/3")
+    c1.markdown(f"AGENT: {st.session_state.player_tag}"); c2.markdown(f"TIME: {time.time()-st.session_state.start_time:.1f}s"); c3.markdown(f"LVL: {lvl+1}/3")
     st.progress(st.session_state.hits/needed, text=f"Neutralized: {st.session_state.hits}/{needed}")
     
     gif, scaled_real, scaled_fake = generate_scaled_gif(LEVEL_FILES[lvl], st.session_state.real_boxes, st.session_state.fake_boxes, GAME_WIDTH, lvl, st.session_state.glitch_seed)
@@ -478,10 +433,8 @@ elif st.session_state.game_state == "playing":
             fake_hit = any((x1-HIT_TOLERANCE) <= cx <= (x2+HIT_TOLERANCE) and (y1-HIT_TOLERANCE) <= cy <= (y2+HIT_TOLERANCE) for x1,y1,x2,y2 in scaled_fake)
             
             if hit:
-                play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav", audio_id="hit-sound")
-                time.sleep(0.3)
-                
-                trigger_static_transition()
+                # --- MODIFIED: `trigger_static_transition` is already fixed ---
+                trigger_static_transition() 
                 st.session_state.hits += 1
                 
                 if st.session_state.hits >= needed:
@@ -493,32 +446,35 @@ elif st.session_state.game_state == "playing":
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
                         
-                        # --- FIXED: Clear the game music player ---
+                        # --- ADDED: Stop game music ---
                         st.session_state.game_music_placeholder.empty()
+                        st.session_state.gameplay_music_playing = False
                         
-                        st.session_state.gameplay_music_playing = False # Reset flag
-                        st.session_state.menu_music_playing = False # Also reset menu flag
                 else: 
                     move_glitch(targets)
-                
                 st.rerun()
                 
-            elif fake_hit:
+            elif fake_hit: 
+                # --- ADDED: Decoy sound ---
                 play_audio("713179__vein_adams__user-interface-beep-error-404-glitch.wav", file_type="wav", audio_id="decoy-sound")
-                time.sleep(0.3)
                 st.toast("DECOY NEUTRALIZED.", icon="⚠")
                 move_glitch(targets)
                 st.rerun()
             
-            else:
+            else: 
+                # --- ADDED: Miss sound ---
                 play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="miss-sound")
-                time.sleep(0.3)
                 st.toast("MISS! RELOCATING...", icon="❌")
                 move_glitch(targets)
                 st.rerun()
 
 elif st.session_state.game_state == "game_over":
     st.balloons()
+    
+    # --- ADDED: Stop game music (in case it wasn't stopped before) ---
+    st.session_state.game_music_placeholder.empty()
+    st.session_state.gameplay_music_playing = False 
+    
     st.markdown(f"## MISSION COMPLETE\n*OPERATIVE:* {st.session_state.player_name}\n*TIME:* {st.session_state.final_time:.2f}s")
     if st.button(">> UPLOAD SCORE <<", type="primary"):
         with st.spinner("UPLOADING..."):
@@ -528,5 +484,7 @@ elif st.session_state.game_state == "game_over":
                 st.error("UPLOAD FAILED.")
         time.sleep(1.5)
         st.session_state.game_state = 'menu'
-        st.session_state.menu_music_playing = False # Reset flag so menu music will play
+        
+        # --- ADDED: Reset menu music flag ---
+        st.session_state.menu_music_playing = False
         st.rerun()
