@@ -353,4 +353,4 @@ if st.session_state.game_state == "menu":
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
     name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
-    usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_us
+    usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_us)
