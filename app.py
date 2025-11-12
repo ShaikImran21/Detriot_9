@@ -362,8 +362,19 @@ if st.session_state.game_state == "menu":
         </style>
         """, unsafe_allow_html=True)
     
-    # Play menu music only once
-    if not st.session_state.menu_music_playing:
+    # Add audio initialization button
+    if 'audio_enabled' not in st.session_state:
+        st.session_state.audio_enabled = False
+    
+    if not st.session_state.audio_enabled:
+        st.warning("🔊 Audio is disabled. Click below to enable sound.")
+        if st.button("🎵 ENABLE AUDIO", type="primary"):
+            st.session_state.audio_enabled = True
+            st.session_state.menu_music_playing = False
+            st.rerun()
+    
+    # Play menu music only once after audio is enabled
+    if st.session_state.audio_enabled and not st.session_state.menu_music_playing:
         play_audio("537256__humanfobia__letargo-sumergido.mp3", loop=True, file_type="mp3", audio_id="menu-music")
         st.session_state.menu_music_playing = True
         st.session_state.gameplay_music_playing = False
@@ -373,7 +384,7 @@ if st.session_state.game_state == "menu":
     name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
     usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
     
-    if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn))):
+    if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn) or not st.session_state.audio_enabled)):
         play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
         stop_all_audio()  # Stop menu music
         time.sleep(0.3)
