@@ -7,7 +7,7 @@ import base64
 from PIL import Image, ImageOps, ImageEnhance
 from streamlit_gsheets import GSheetsConnection
 from streamlit_image_coordinates import streamlit_image_coordinates
-import re 
+import re
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -15,7 +15,7 @@ from google.oauth2.service_account import Credentials
 st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="wide", initial_sidebar_state="collapsed")
 
 GAME_WIDTH = 1200
-HIT_TOLERANCE = 150 
+HIT_TOLERANCE = 150
 
 LEVEL_FILES = ["assets/level1.png", "assets/level2.png", "assets/level3.png"]
 GLITCHES_PER_LEVEL = [3, 5, 7]
@@ -346,6 +346,7 @@ if 'game_state' not in st.session_state:
         'menu_music_playing': False,
         'gameplay_music_playing': False,
         # --- FIXED: Add placeholders for persistent audio ---
+        # This is the correct way: store the st.empty() object itself in state.
         'menu_music_placeholder': st.empty(),
         'game_music_placeholder': st.empty()
     })
@@ -376,14 +377,16 @@ if st.session_state.game_state == "menu":
             time.sleep(0.1) # Give it a tiny moment to register
             st.rerun()
     
-    # --- FIXED: Menu Music Logic ---
-    if st.session_state.audio_enabled and not st.session_state.menu_music_playing:
-        audio_html = play_background_music("537256__humanfobia__letargo-sumergido.mp3", file_type="mp3", audio_id="menu-music")
-        if audio_html:
-            # Place the audio player in its persistent placeholder
-            st.session_state.menu_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
-            st.session_state.menu_music_playing = True
-            st.session_state.gameplay_music_playing = False
+    # --- RE-FIXED: Menu Music Logic ---
+    if st.session_state.audio_enabled:
+        # Only inject the audio element IF it's not already playing
+        if not st.session_state.menu_music_playing:
+            audio_html = play_background_music("537256__humanfobia__letargo-sumergido.mp3", file_type="mp3", audio_id="menu-music")
+            if audio_html:
+                # Fill the placeholder ONCE. It will persist until we .empty() it.
+                st.session_state.menu_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
+                st.session_state.menu_music_playing = True
+                st.session_state.gameplay_music_playing = False
     
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
@@ -395,7 +398,7 @@ if st.session_state.game_state == "menu":
         play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
         
         # --- FIXED: Clear the menu music player ---
-        st.session_state.menu_music_placeholder.empty()
+        st.session_state.menu_music_placeholder.empty() # This empties the *content*
         
         time.sleep(0.3)
         
@@ -447,14 +450,16 @@ elif st.session_state.game_state == "playing":
         </style>
         """, unsafe_allow_html=True)
     
-    # --- FIXED: Gameplay Music Logic ---
-    if st.session_state.audio_enabled and not st.session_state.gameplay_music_playing:
-        audio_html = play_background_music("615546__projecteur__cosmic-dark-synthwave.mp3", file_type="mp3", audio_id="gameplay-music")
-        if audio_html:
-            # Place the game music in its persistent placeholder
-            st.session_state.game_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
-            st.session_state.gameplay_music_playing = True
-            st.session_state.menu_music_playing = False
+    # --- RE-FIXED: Gameplay Music Logic ---
+    if st.session_state.audio_enabled:
+        # Only inject the audio element IF it's not already playing
+        if not st.session_state.gameplay_music_playing:
+            audio_html = play_background_music("615546__projecteur__cosmic-dark-synthwave.mp3", file_type="mp3", audio_id="gameplay-music")
+            if audio_html:
+                # Fill the placeholder ONCE.
+                st.session_state.game_music_placeholder.markdown(audio_html, unsafe_allow_html=True)
+                st.session_state.gameplay_music_playing = True
+                st.session_state.menu_music_playing = False
 
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
@@ -492,6 +497,7 @@ elif st.session_state.game_state == "playing":
                         st.session_state.game_music_placeholder.empty()
                         
                         st.session_state.gameplay_music_playing = False # Reset flag
+                        st.session_state.menu_music_playing = False # Also reset menu flag
                 else: 
                     move_glitch(targets)
                 
