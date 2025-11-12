@@ -10,7 +10,8 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 import re
 import gspread
 from google.oauth2.service_account import Credentials
-from streamlit_js_eval import streamlit_js_eval, sync_session_state # <-- IMPORT NEW
+# This import is essential and MUST be in your requirements.txt
+from streamlit_js_eval import streamlit_js_eval 
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="DETROIT: ANOMALY [09]", layout="wide", initial_sidebar_state="collapsed")
@@ -25,135 +26,22 @@ GLITCHES_PER_LEVEL = [3, 5, 7]
 def get_base64(bin_file):
     try:
         with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
-    except: return None
+    except Exception as e:
+        print(f"Error getting base64 for {bin_file}: {e}")
+        return None
 
-# --- AUDIO FUNCTIONS ---
+# --- AUDIO FUNCTIONS (SOUND EFFECTS) ---
 @st.cache_data(show_spinner=False, persist="disk")
-def get_audio_base64(bin_file):
-    try:
-        with open(bin_file, 'rb') as f: return base64.b64encode(f.read()).decode()
-    except: return None
+def get_audio_base64_cached(bin_file):
+    return get_base64(bin_file)
 
-# --- ★★★ NEW: JAVASCRIPT AUDIO CONTROL ★★★ ---
-
-# 1. Store audio files in session state to pass to JS
-if 'audio_files' not in st.session_state:
-    st.session_state.audio_files = {
-        "menu": f"data:audio/mp3;base64,{get_audio_base64('537256__humanfobia__letargo-sumergido.mp3')}",
-        "game": f"data:audio/mp3;base64,{get_audio_base64('615546__projecteur__cosmic-dark-synthwave.mp3')}"
-    }
-
-# 2. This JS function creates/controls a persistent audio player
-# It lives outside the Streamlit re-run loop.
-JS_AUDIO_HANDLER = """
-<div id="audio-container" style="display:none;">
-    <audio id="menu-music" loop>
-        <source src="%s" type="audio/mp3">
-    </audio>
-    <audio id="gameplay-music" loop>
-        <source src="%s" type="audio/mp3">
-    </audio>
-</div>
-
-<script>
-(function() {
-    // Get the audio elements
-    const menuMusic = document.getElementById('menu-music');
-    const gameMusic = document.getElementById('gameplay-music');
-    let currentTrack = null; // To track which audio is playing
-
-    // Function to play a specific track
-    function playTrack(trackId) {
-        let newTrack = null;
-        if (trackId === 'menu') {
-            newTrack = menuMusic;
-        } else if (trackId === 'game') {
-            newTrack = gameMusic;
-        }
-
-        // Stop the *other* track if it's playing
-        if (currentTrack && currentTrack !== newTrack) {
-            currentTrack.pause();
-            currentTrack.currentTime = 0;
-        }
-
-        // Play the new track if it's not already playing
-        if (newTrack && newTrack.paused) {
-            newTrack.play().catch(e => console.error("Audio play failed:", e));
-        }
-        currentTrack = newTrack;
-    }
-
-    // Function to stop all tracks
-    function stopAll() {
-        if (menuMusic) menuMusic.pause();
-        if (gameMusic) gameMusic.pause();
-        currentTrack = null;
-    }
-
-    // Callback to handle messages from Streamlit
-    function handleStreamlitMessage(event) {
-        if (event.data.type === 'streamlit:setSessionState') {
-            if (event.data.key === 'audio_command') {
-                const command = event.data.value;
-                if (command === 'menu') {
-                    playTrack('menu');
-                } else if (command === 'game') {
-                    playTrack('game');
-                } else if (command === 'stop') {
-                    stopAll();
-                }
-                // Clear the command after processing
-                window.parent.Streamlit.setSessionState('audio_command', null);
-            }
-        }
-    }
-
-    // Add the message listener
-    window.parent.addEventListener('message', handleStreamlitMessage);
-
-    // Initial check in case session state was set on first load
-    const initialCommand = window.parent.Streamlit.getSessionState('audio_command');
-    if (initialCommand) {
-        handleStreamlitMessage({ data: { type: 'streamlit:setSessionState', key: 'audio_command', value: initialCommand } });
-    }
-})();
-</script>
-"""
-
-def init_audio_player():
-    """
-    Injects the persistent JavaScript audio player into the page.
-    """
-    # Check if a container already exists; if not, inject it.
-    # We use js_eval to run this script.
-    # This component injects the HTML into the <body>, outside the main re-run frame.
-    st.components.v1.html(
-        JS_AUDIO_HANDLER % (st.session_state.audio_files["menu"], st.session_state.audio_files["game"]),
-        height=0,
-        scrolling=False
-    )
-    
-# 3. This is the function we'll call from Python
-def set_audio_track(track_name):
-    """
-    Sets the audio track ('menu', 'game', 'stop') in session state.
-    The JavaScript listener will pick this up.
-    """
-    st.session_state.audio_command = track_name
-    # We need to sync the state so the JS can see it immediately
-    sync_session_state(keys=['audio_command'])
-
-# --- Sound Effect Function (Unchanged) ---
 def play_audio(audio_file, file_type="wav", audio_id=""):
     """
-    Plays a one-shot sound effect.
-    Uses a unique ID to be re-triggerable.
+    Plays a one-shot sound effect. This is for clicks, hits, etc.
     """
     try:
-        audio_base64 = get_audio_base64(audio_file)
+        audio_base64 = get_audio_base64_cached(audio_file)
         if audio_base64:
-            # Use a unique key to force re-rendering and re-playing
             unique_id = f"{audio_id}_{random.randint(1000,9999)}"
             audio_html = f"""
                 <audio id="{unique_id}" autoplay style="display:none;">
@@ -165,59 +53,114 @@ def play_audio(audio_file, file_type="wav", audio_id=""):
         print(f"Audio error: {e}")
         pass
 
+# --- ★★★ NEW: BACKGROUND MUSIC CONTROL ★★★ ---
+
+@st.cache_data(show_spinner=False)
+def get_persistent_audio_html():
+    """
+    Generates the HTML for the persistent audio players.
+    This runs only once.
+    """
+    menu_b64 = get_base64('537256__humanfobia__letargo-sumergido.mp3')
+    game_b64 = get_base64('615546__projecteur__cosmic-dark-synthwave.mp3')
+
+    if not menu_b64 or not game_b64:
+        st.error("CRITICAL: Failed to load background music files.")
+        return ""
+
+    html = f"""
+    <div id="persistent-audio" style="display:none;">
+        <audio id="menu-music" loop>
+            <source src="data:audio/mp3;base64,{menu_b64}" type="audio/mp3">
+            Your browser does not support the audio element.
+        </audio>
+        <audio id="gameplay-music" loop>
+            <source src="data:audio/mp3;base64,{game_b64}" type="audio/mp3">
+            Your browser does not support the audio element.
+        </audio>
+    </div>
+    """
+    return html
+
+def control_audio(command):
+    """
+    Sends a direct play/pause command to the persistent audio players.
+    Commands: "play_menu", "play_game", "stop_all"
+    """
+    if not st.session_state.get('audio_enabled', False):
+        command = "stop_all" # Force stop if audio is disabled
+
+    js_code = f"""
+    (function() {{
+        const menuMusic = document.getElementById('menu-music');
+        const gameMusic = document.getElementById('gameplay-music');
+        const command = "{command}";
+
+        if (!menuMusic || !gameMusic) {{
+            console.warn('Audio elements not found. Cannot execute command: {command}');
+            return;
+        }}
+
+        try {{
+            if (command === "play_menu") {{
+                if (gameMusic.played && !gameMusic.paused) {{
+                    gameMusic.pause();
+                    gameMusic.currentTime = 0;
+                }}
+                if (menuMusic.paused) {{
+                    menuMusic.play();
+                }}
+            }} else if (command === "play_game") {{
+                if (menuMusic.played && !menuMusic.paused) {{
+                    menuMusic.pause();
+                    menuMusic.currentTime = 0;
+                }}
+                if (gameMusic.paused) {{
+                    gameMusic.play();
+                }}
+            }} else if (command === "stop_all") {{
+                if (menuMusic.played && !menuMusic.paused) {{
+                    menuMusic.pause();
+                    menuMusic.currentTime = 0;
+                }}
+                if (gameMusic.played && !gameMusic.paused) {{
+                    gameMusic.pause();
+                    gameMusic.currentTime = 0;
+                }}
+            }}
+        }} catch (e) {{
+            console.error('Audio control error:', e);
+        }}
+    }})();
+    """
+    streamlit_js_eval(js_code)
+
+
 # --- CSS: ULTRA GLITCH + MOBILE FIX (Unchanged) ---
 def inject_css(video_file_path):
-    
-    # 1. ENCODE THE VIDEO FILE
     video_base64 = get_base64(video_file_path)
-    
-    # 2. CREATE THE HTML <video> TAG
     if video_base64:
         video_html = f"""
         <video id="video-bg" autoplay loop muted>
             <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
-            Your browser does not support the video tag.
         </video>
         """
         st.markdown(video_html, unsafe_allow_html=True)
 
-    # 3. CSS for the video + original CSS
     st.markdown(f"""
         <style>
-            /* --- START: VIDEO BACKGROUND --- */
             #video-bg {{
-                position: fixed;
-                right: 0;
-                bottom: 0;
-                min-width: 100%;
-                min-height: 100%;
-                width: auto;
-                height: auto;
-                z-index: -100;
-                object-fit: cover;
-                opacity: 1.0;
-                display: none;
+                position: fixed; right: 0; bottom: 0;
+                min-width: 100%; min-height: 100%;
+                width: auto; height: auto; z-index: -100;
+                object-fit: cover; display: none;
             }}
-            /* --- END: VIDEO BACKGROUND --- */
-
-            /* BASE THEME - MODIFIED for VIDEO */
             .stApp {{ 
-                background-color: #080808;
-                background-size: cover;
-                background-repeat: no-repeat;
-                background-attachment: fixed;
-                background-position: center;
-                color: #d0d0d0; 
+                background-color: #080808; color: #d0d0d0; 
                 font-family: 'Courier New', monospace; 
             }}
             #MainMenu, footer, header {{visibility: hidden;}}
-
-            /* FORCE HORIZONTAL SCROLL ON MOBILE */
-            .block-container {{
-                overflow-x: auto !important;
-            }}
-            
-            /* HARDWARE-ACCELERATED STATIC OVERLAY */
+            .block-container {{ overflow-x: auto !important; }}
             #static-overlay {{
                 position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
                 background: repeating-linear-gradient(transparent 0px, rgba(0, 0, 0, 0.25) 50%, transparent 100%),
@@ -231,21 +174,12 @@ def inject_css(video_file_path):
                 50% {{ transform: translate3d(5px, 5px, 0); opacity: 0.15; }}
                 75% {{ transform: translate3d(-5px, 5px, 0); opacity: 0.25; }}
             }}
-            
-            /* --- START: Glitchy Title Background --- */
-            h1 {{
-                position: relative !important;
-                z-index: 1;
-                padding: 10px 5px; 
-            }}
-            
-            /* GLOBAL TEXT GLITCH */
+            h1 {{ position: relative !important; z-index: 1; padding: 10px 5px; }}
             h1, h2, h3, h4, h5, h6, p, label, span, div, button, a, input, .stDataFrame, .stMarkdown, .stExpander {{
                 animation: glitch-text 500ms infinite !important; color: #d0d0d0 !important;
             }}
             img, #static-overlay {{ animation: none !important; }}
             #static-overlay {{ animation: gpu-jitter 0.3s infinite linear alternate-reverse !important; }}
-
             @keyframes glitch-text {{
                 0% {{ text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }}
                 14% {{ text-shadow: 0.05em 0 0 rgba(255,0,0,0.75), -0.025em -0.05em 0 rgba(0,255,0,0.75), 0.025em 0.05em 0 rgba(0,0,255,0.75); }}
@@ -255,24 +189,14 @@ def inject_css(video_file_path):
                 99% {{ text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75); }}
                 100% {{ text-shadow: -0.025em 0 0 rgba(255,0,0,0.75), -0.025em -0.025em 0 rgba(0,255,0,0.75), -0.025em -0.05em 0 rgba(0,0,255,0.75); }}
             }}
-            /* --- NEW: MOBILE-SPECIFIC RULES --- */
             @media (max-width: 768px) {{
-                div[data-testid="stImageCoordinates"] img {{
-                    width: 100% !important;
-                    height: auto !important;
-                }}
-
-                div[data-testid="stImageCoordinates"] {{
-                    width: 100% !important;
-                }}
+                div[data-testid="stImageCoordinates"] img {{ width: 100% !important; height: auto !important; }}
+                div[data-testid="stImageCoordinates"] {{ width: 100% !important; }}
             }}
         </style>
     """, unsafe_allow_html=True)
 
-# --- (Rest of your helper functions: trigger_static_transition, 
-# get_random_box, check_overlap, move_glitch, generate_mutating_frame, 
-# generate_scaled_gif, validate_usn, save_score, get_leaderboard ... 
-# these are all unchanged and correct) ---
+# --- (Rest of your helper functions are unchanged) ---
 
 def trigger_static_transition():
     play_audio("https://www.myinstants.com/media/sounds/static-noise.mp3", file_type="mp3", audio_id="static")
@@ -285,7 +209,6 @@ def trigger_static_transition():
         time.sleep(0.4)
     placeholder.empty()
 
-# --- SMART GLITCH GENERATION ---
 def get_random_box(level, is_fake=False):
     if is_fake: max_s, min_s = max(180 - level*15, 60), max(70 - level*5, 40)
     else: max_s, min_s = max(150 - level*20, 30), min(max(50 - level*10, 15), max(150 - level*20, 30))
@@ -338,30 +261,23 @@ def generate_scaled_gif(img_path, real_boxes_orig, fake_boxes_orig, target_width
     try:
         random.seed(glitch_seed)
         base_img = Image.open(img_path).convert("RGB")
-        
-        # Calculate 16:9 aspect ratio
         target_height = int(target_width * (9 / 16))
         sf_width = target_width / base_img.width
         sf_height = target_height / base_img.height
-        
         base_img = base_img.resize((target_width, target_height), Image.Resampling.LANCZOS)
-        
         scaled_real = [(int(x1*sf_width), int(y1*sf_height), int(x2*sf_width), int(y2*sf_height)) for x1,y1,x2,y2 in real_boxes_orig]
         scaled_fake = [(int(x1*sf_width), int(y1*sf_height), int(x2*sf_width), int(y2*sf_height)) for x1,y1,x2,y2 in fake_boxes_orig]
-        
         frames = [base_img.copy() for _ in range(15)]
         for _ in range(8):
             frames.append(generate_mutating_frame(generate_mutating_frame(base_img, real_boxes_orig, False), fake_boxes_orig, True))
-        
         temp_file = f"/tmp/lvl_{level_idx}_{glitch_seed}.gif"
         frames[0].save(temp_file, format="GIF", save_all=True, append_images=frames[1:], duration=[200]*15+[70]*8, loop=0)
         return temp_file, scaled_real, scaled_fake
-    
     except: return None, [], []
 
 def validate_usn(usn): return re.match(r"^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$", usn)
 
-# --- GOOGLE SHEETS ---
+# --- GOOGLE SHEETS (Unchanged) ---
 conn = None
 try: conn = st.connection("gsheets", type=GSheetsConnection)
 except: pass
@@ -372,36 +288,22 @@ def save_score(tag, name, usn, time_val):
             "https.://spreadsheets.google.com/feeds",
             "https.://www.googleapis.com/auth/drive"
         ]
-        
         creds_dict = st.secrets["connections"]["gsheets"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        
         client = gspread.authorize(creds)
-        
         if "spreadsheet" not in creds_dict:
             st.error("GSheets Error: 'spreadsheet' (URL) not found in secrets.")
             return False
-            
         spreadsheet_url = creds_dict["spreadsheet"]
         sh = client.open_by_url(spreadsheet_url)
-
         try:
             worksheet = sh.worksheet("Scores")
         except gspread.exceptions.WorksheetNotFound:
-            print("Worksheet 'Scores' not found, creating it.")
             worksheet = sh.add_worksheet(title="Scores", rows=100, cols=4)
             worksheet.append_row(["Tag", "Name", "USN", "Time"])
-            print("Worksheet 'Scores' created with headers.")
-
-        worksheet.append_row([
-            str(tag), 
-            str(name), 
-            str(usn), 
-            str(f"{time_val:.2f}")
-        ])
+        worksheet.append_row([str(tag), str(name), str(usn), str(f"{time_val:.2f}")])
         return True
     except Exception as e:
-        print(f"GSheets Write Error: {e}")
         st.error(f"GSheets Write Error: {e}")
         return False
 
@@ -439,66 +341,52 @@ if 'game_state' not in st.session_state:
         'fake_boxes': [], 
         'hits': 0,
         'audio_enabled': False,
-        'audio_command': None, # <-- NEW: State for JS communication
-        'audio_initialized': False # <-- NEW: Flag to inject player once
+        'audio_initialized': False # Flag to inject player HTML once
     })
 
-# --- ★★★ NEW: Inject the audio player ONCE ---
+# --- ★★★ NEW: Inject the audio player HTML ONCE ---
 if not st.session_state.audio_initialized:
-    init_audio_player()
-    st.session_state.audio_initialized = True
+    player_html = get_persistent_audio_html()
+    if player_html:
+        # Use st.components.v1.html to inject into the main body
+        st.components.v1.html(player_html, height=0, scrolling=False)
+        st.session_state.audio_initialized = True
+    else:
+        st.error("Audio files missing. Background music will be disabled.")
 
 
 st.title("DETROIT: ANOMALY [09]")
 
 if st.session_state.game_state == "menu":
-    # Show video background
-    st.markdown("""
-        <style>
-        #video-bg { display: block !important; }
-        .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }
-        </style>
-        """, unsafe_allow_html=True)
+    st.markdown("""<style>#video-bg { display: block !important; } .stApp { background-color: rgba(8, 8, 8, 0.75) !important; }</style>""", unsafe_allow_html=True)
     
-    # --- "Enable Audio" button logic ---
     if not st.session_state.audio_enabled:
         st.warning("🔊 Audio is disabled. Click below to enable sound.")
         if st.button("🎵 ENABLE AUDIO", type="primary"):
             st.session_state.audio_enabled = True
             play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="unlock-sound")
-            
-            # --- ★★★ NEW: Send "play menu" command ---
-            set_audio_track("menu") 
-            
-            time.sleep(0.1)
+            control_audio("play_menu") # <-- Tell JS to play menu
+            time.sleep(0.1) # Give JS a moment
             st.rerun()
     else:
-        # --- ★★★ NEW: If audio is on, ensure menu music is set ---
-        # This will run on every re-run of the menu page
-        set_audio_track("menu")
+        # --- ★★★ NEW: Sync audio on every menu rerun ---
+        control_audio("play_menu")
 
     st.markdown("### OPERATIVE DATA INPUT")
     tag = st.text_input(">> AGENT TAG (3 CHARS):", max_chars=3, value=st.session_state.player_tag if st.session_state.player_tag != 'UNK' else '').upper()
     name = st.text_input(">> FULL NAME:", value=st.session_state.player_name)
     usn = st.text_input(">> USN (e.g., 1MS22AI000):", value=st.session_state.player_usn).upper()
     
-    # --- "Start Simulation" button logic ---
     if st.button(">> START SIMULATION <<", type="primary", disabled=(len(tag)!=3 or not name or not validate_usn(usn) or not st.session_state.audio_enabled)):
         play_audio("541987__rob_marion__gasp_ui_clicks_5.wav", file_type="wav", audio_id="click-sound")
         
-        # --- ★★★ NEW: Send "play game" command ---
-        set_audio_track("game")
+        # --- ★★★ NEW: Tell JS to play game ---
+        control_audio("play_game") 
         
         time.sleep(0.3)
-        
         st.session_state.update({
-            'game_state': 'playing', 
-            'player_tag': tag, 
-            'player_name': name, 
-            'player_usn': usn, 
-            'start_time': time.time(), 
-            'current_level': 0, 
-            'hits': 0
+            'game_state': 'playing', 'player_tag': tag, 'player_name': name, 
+            'player_usn': usn, 'start_time': time.time(), 'current_level': 0, 'hits': 0
         })
         move_glitch(get_num_real_targets(0))
         st.rerun()
@@ -511,7 +399,7 @@ if st.session_state.game_state == "menu":
         2. ENGAGE: Tap precisely on the real anomaly.
         3. ADVANCE: Clear 3 Sectors.
         4. CAUTION: Sector 3 contains MULTIPLE simultaneous targets.
-        """, unsafe_allow_html=True)
+        """)
         
     with st.expander("CREDITS // SYSTEM INFO"):
         st.markdown("""
@@ -529,18 +417,10 @@ if st.session_state.game_state == "menu":
     else: st.error("CONNECTION SEVERED.")
 
 elif st.session_state.game_state == "playing":
-    # Hide video background
-    st.markdown("""
-        <style>
-        #video-bg { display: none !important; }
-        .stApp { background-color: #080808 !important; }
-        </style>
-        """, unsafe_allow_html=True)
+    st.markdown("""<style>#video-bg { display: none !important; } .stApp { background-color: #080808 !important; }</style>""", unsafe_allow_html=True)
     
-    # --- ★★★ NEW: Ensure game music is set ---
-    # This runs on every re-run of the playing page (e.g., clicks)
-    if st.session_state.audio_enabled:
-        set_audio_track("game")
+    # --- ★★★ NEW: Sync audio on every playing rerun ---
+    control_audio("play_game")
 
     lvl = st.session_state.current_level
     needed, targets = GLITCHES_PER_LEVEL[lvl], get_num_real_targets(lvl)
@@ -561,7 +441,6 @@ elif st.session_state.game_state == "playing":
             if hit:
                 play_audio("828680__jw_audio__uimisc_digital-interface-message-selection-confirmation-alert_10_jw-audio_user-interface.wav", file_type="wav", audio_id="hit-sound")
                 time.sleep(0.3)
-                
                 trigger_static_transition()
                 st.session_state.hits += 1
                 
@@ -573,12 +452,9 @@ elif st.session_state.game_state == "playing":
                     else: 
                         st.session_state.final_time = time.time() - st.session_state.start_time
                         st.session_state.game_state = 'game_over'
-                        
-                        # --- ★★★ NEW: Send "stop" command ---
-                        set_audio_track("stop") 
+                        control_audio("stop_all") # <-- Tell JS to stop
                 else: 
                     move_glitch(targets)
-                
                 st.rerun()
                 
             elif fake_hit:
@@ -596,9 +472,8 @@ elif st.session_state.game_state == "playing":
                 st.rerun()
 
 elif st.session_state.game_state == "game_over":
-    # --- ★★★ NEW: Ensure music is stopped ---
-    if st.session_state.audio_enabled:
-        set_audio_track("stop")
+    # --- ★★★ NEW: Sync audio on game_over rerun ---
+    control_audio("stop_all")
         
     st.balloons()
     st.markdown(f"## MISSION COMPLETE\n*OPERATIVE:* {st.session_state.player_name}\n*TIME:* {st.session_state.final_time:.2f}s")
@@ -610,8 +485,5 @@ elif st.session_state.game_state == "game_over":
                 st.error("UPLOAD FAILED.")
         time.sleep(1.5)
         st.session_state.game_state = 'menu'
-        
-        # --- ★★★ NEW: Send "play menu" command for return ---
-        set_audio_track("menu")
-        
+        control_audio("play_menu") # <-- Tell JS to play menu
         st.rerun()
